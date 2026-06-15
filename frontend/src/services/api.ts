@@ -9,6 +9,8 @@ export interface User {
   email: string;
   role: 'admin' | 'user';
   team: string | null;
+  primary_team?: string | null;
+  secondary_team?: string | null;
   is_active: boolean;
   created_date: string;
 }

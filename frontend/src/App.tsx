@@ -2228,7 +2228,8 @@ export function AdminUsers() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'admin' | 'user'>('user');
-  const [team, setTeam] = useState('');
+  const [primaryTeam, setPrimaryTeam] = useState('');
+  const [secondaryTeam, setSecondaryTeam] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
@@ -2254,7 +2255,8 @@ export function AdminUsers() {
     setEmail('');
     setPassword('');
     setRole('user');
-    setTeam('');
+    setPrimaryTeam('');
+    setSecondaryTeam('');
     setIsActive(true);
     setShowCreatePassword(false);
     setShowModal('create');
@@ -2266,7 +2268,8 @@ export function AdminUsers() {
     setUsername(u.username);
     setEmail(u.email);
     setRole(u.role);
-    setTeam(u.team || '');
+    setPrimaryTeam(u.primary_team || '');
+    setSecondaryTeam(u.secondary_team || '');
     setIsActive(u.is_active);
     setShowModal('edit');
   };
@@ -2305,7 +2308,8 @@ export function AdminUsers() {
         email,
         password,
         role,
-        team: team || null,
+        primary_team: primaryTeam || null,
+        secondary_team: secondaryTeam || null,
         is_active: isActive
       });
       showSuccess('User successfully created!');
@@ -2333,7 +2337,8 @@ export function AdminUsers() {
         username,
         email,
         role,
-        team: team || null,
+        primary_team: primaryTeam || null,
+        secondary_team: secondaryTeam || null,
         is_active: isActive
       });
       showSuccess('User profile successfully updated!');
@@ -2442,17 +2447,21 @@ export function AdminUsers() {
                   </button>
                 </div>
               </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="new-role">Role</label>
+                <select id="new-role" className="form-input form-select" value={role} onChange={(e) => setRole(e.target.value as any)} disabled={submitting}>
+                  <option value="user">Team Member</option>
+                  <option value="admin">Administrator</option>
+                </select>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="new-role">Role</label>
-                  <select id="new-role" className="form-input form-select" value={role} onChange={(e) => setRole(e.target.value as any)} disabled={submitting}>
-                    <option value="user">Team Member</option>
-                    <option value="admin">Administrator</option>
-                  </select>
+                  <label className="form-label" htmlFor="new-primary-team">Primary Team</label>
+                  <input id="new-primary-team" type="text" className="form-input" placeholder="e.g. Backend Dev" value={primaryTeam} onChange={(e) => setPrimaryTeam(e.target.value)} disabled={submitting} required />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="new-team">Team</label>
-                  <input id="new-team" type="text" className="form-input" placeholder="e.g. Backend Dev" value={team} onChange={(e) => setTeam(e.target.value)} disabled={submitting} />
+                  <label className="form-label" htmlFor="new-secondary-team">Secondary Team (Optional)</label>
+                  <input id="new-secondary-team" type="text" className="form-input" placeholder="e.g. Frontend Dev" value={secondaryTeam} onChange={(e) => setSecondaryTeam(e.target.value)} disabled={submitting} />
                 </div>
               </div>
               <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
@@ -2489,17 +2498,21 @@ export function AdminUsers() {
                 <label className="form-label" htmlFor="edit-email">Email Address</label>
                 <input id="edit-email" type="email" className="form-input" value={email} onChange={(e) => setEmail(e.target.value)} disabled={submitting} />
               </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-role">Role</label>
+                <select id="edit-role" className="form-input form-select" value={role} onChange={(e) => setRole(e.target.value as any)} disabled={submitting}>
+                  <option value="user">Team Member</option>
+                  <option value="admin">Administrator</option>
+                </select>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="edit-role">Role</label>
-                  <select id="edit-role" className="form-input form-select" value={role} onChange={(e) => setRole(e.target.value as any)} disabled={submitting}>
-                    <option value="user">Team Member</option>
-                    <option value="admin">Administrator</option>
-                  </select>
+                  <label className="form-label" htmlFor="edit-primary-team">Primary Team</label>
+                  <input id="edit-primary-team" type="text" className="form-input" value={primaryTeam} onChange={(e) => setPrimaryTeam(e.target.value)} disabled={submitting} required />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="edit-team">Team</label>
-                  <input id="edit-team" type="text" className="form-input" value={team} onChange={(e) => setTeam(e.target.value)} disabled={submitting} />
+                  <label className="form-label" htmlFor="edit-secondary-team">Secondary Team (Optional)</label>
+                  <input id="edit-secondary-team" type="text" className="form-input" value={secondaryTeam} onChange={(e) => setSecondaryTeam(e.target.value)} disabled={submitting} />
                 </div>
               </div>
               <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
@@ -3007,11 +3020,12 @@ export function AdminRoadmaps() {
                   className="glass-card" 
                   style={{ 
                     display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
+                    flexDirection: 'column',
+                    gap: '0.75rem',
                     padding: '1rem 1.25rem', 
                     borderRadius: '12px',
-                    backgroundColor: 'rgba(255,255,255,0.01)'
+                    backgroundColor: 'rgba(255,255,255,0.01)',
+                    border: '1px solid rgba(255,255,255,0.02)'
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -3025,7 +3039,7 @@ export function AdminRoadmaps() {
                   </div>
                   <button 
                     className="btn btn-primary" 
-                    style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap', flexShrink: 0 }} 
+                    style={{ width: '100%', padding: '0.5rem 1rem', fontSize: '0.85rem' }} 
                     onClick={() => openAssignModal(u)}
                   >
                     Edit Roadmap

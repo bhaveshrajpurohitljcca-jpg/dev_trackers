@@ -24,17 +24,8 @@ def get_users(db: Session, skip: int = 0, limit: int = 100):
 def create_user(db: Session, user: schemas.UserCreate):
     hashed_pwd = get_password_hash(user.password)
     
-    # Compute combined team name if primary_team or secondary_team is set
     p_team = user.primary_team
     s_team = user.secondary_team
-    team_val = user.team
-    if p_team or s_team:
-        if p_team and s_team:
-            team_val = f"{p_team}, {s_team}"
-        elif p_team:
-            team_val = p_team
-        else:
-            team_val = s_team
 
     db_user = models.User(
         full_name=user.full_name,
@@ -42,7 +33,6 @@ def create_user(db: Session, user: schemas.UserCreate):
         email=user.email,
         hashed_password=hashed_pwd,
         role=user.role,
-        team=team_val,
         primary_team=p_team,
         secondary_team=s_team,
         is_active=user.is_active
@@ -71,19 +61,6 @@ def update_user(db: Session, user_id: int, user_update: schemas.UserUpdate):
     if "password" in update_data and update_data["password"]:
         update_data["hashed_password"] = get_password_hash(update_data["password"])
         del update_data["password"]
-        
-    # Recalculate combined team name if primary_team or secondary_team is updated
-    if "primary_team" in update_data or "secondary_team" in update_data:
-        p_team = update_data.get("primary_team", db_user.primary_team)
-        s_team = update_data.get("secondary_team", db_user.secondary_team)
-        if p_team and s_team:
-            update_data["team"] = f"{p_team}, {s_team}"
-        elif p_team:
-            update_data["team"] = p_team
-        elif s_team:
-            update_data["team"] = s_team
-        else:
-            update_data["team"] = None
         
     for key, value in update_data.items():
         setattr(db_user, key, value)
@@ -635,7 +612,7 @@ def seed_admin_user(db: Session):
             email="admin@tracker.com",
             password="admin123", # default password
             role="admin",
-            team="Management",
+            primary_team="Management",
             is_active=True
         )
         create_user(db, admin_create)
@@ -649,7 +626,8 @@ def seed_admin_user(db: Session):
             email="bhavesh@tracker.com",
             password="user123",
             role="user",
-            team="Backend Development",
+            primary_team="Backend Development",
+            secondary_team="Database",
             is_active=True
         )
         db_user = create_user(db, user_create)
@@ -668,7 +646,7 @@ def seed_admin_user(db: Session):
             email="rahul@tracker.com",
             password="user123",
             role="user",
-            team="Java Development",
+            primary_team="Java Development",
             is_active=True
         )
         db_user = create_user(db, user_create)
