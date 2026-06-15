@@ -15,7 +15,7 @@ def send_email_smtp(
     smtp_port: Optional[int] = None,
     smtp_user: Optional[str] = None,
     smtp_password: Optional[str] = None
-) -> bool:
+) -> tuple[bool, str]:
     # Resolve SMTP configurations (db settings or environment variables fallback)
     host = smtp_host or settings.SMTP_HOST
     port = smtp_port or settings.SMTP_PORT or 587
@@ -24,8 +24,9 @@ def send_email_smtp(
 
     # Check if SMTP settings are configured
     if not user or not password:
-        logger.warning(f"SMTP credentials not configured. Mock logging email to {recipient_email}")
-        return False
+        err = "SMTP credentials not configured"
+        logger.warning(f"{err}. Mock logging email to {recipient_email}")
+        return False, err
         
     try:
         # Create message
@@ -36,9 +37,17 @@ def send_email_smtp(
         
         msg.attach(MIMEText(body, 'plain'))
         
-        # Connect to server
-        server = smtplib.SMTP(host, port)
-        server.starttls()  # Upgrade connection to secure TLS
+        # Connect and send
+        if port == 465:
+            logger.info(f"Connecting to SMTP SSL server {host}:{port} with 10s timeout...")
+            server = smtplib.SMTP_SSL(host, port, timeout=10)
+        else:
+            logger.info(f"Connecting to SMTP server {host}:{port} with 10s timeout...")
+            server = smtplib.SMTP(host, port, timeout=10)
+            try:
+                server.starttls()  # Upgrade connection to secure TLS
+            except Exception as tls_err:
+                logger.warning(f"STARTTLS failed or not supported: {str(tls_err)}")
         
         # Login
         server.login(user, password)
@@ -48,7 +57,8 @@ def send_email_smtp(
         server.quit()
         
         logger.info(f"Email successfully sent to {recipient_email}")
-        return True
+        return True, "Sent"
     except Exception as e:
-        logger.error(f"Failed to send email to {recipient_email}: {str(e)}")
-        return False
+        err_msg = str(e)
+        logger.error(f"Failed to send email to {recipient_email}: {err_msg}")
+        return False, err_msg

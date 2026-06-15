@@ -874,7 +874,7 @@ def trigger_daily_reminders(db: Session = Depends(get_db), current_admin: models
                 f"Best,\nTeam Progress Tracker"
             )
             # Send real email via SMTP
-            sent = send_email_smtp(
+            sent, err_msg = send_email_smtp(
                 user.email, 
                 "Reminder: Submit your work log today!", 
                 body,
@@ -887,7 +887,7 @@ def trigger_daily_reminders(db: Session = Depends(get_db), current_admin: models
                 recipient_email=user.email,
                 subject="Reminder: Submit your work log today!",
                 body=body,
-                status="Sent" if sent else "Failed"
+                status="Sent" if sent else f"Failed: {err_msg}"
             )
             db.add(email_log)
             sent_count += 1
@@ -932,7 +932,7 @@ def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: 
                 f"Best,\nTeam Progress Tracker"
             )
             # Send real email to the user
-            sent_user = send_email_smtp(
+            sent_user, err_msg_user = send_email_smtp(
                 user.email, 
                 f"Missing Daily Work Log - {today}", 
                 user_body,
@@ -945,7 +945,7 @@ def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: 
                 recipient_email=user.email,
                 subject=f"Missing Daily Work Log - {today}",
                 body=user_body,
-                status="Sent" if sent_user else "Failed"
+                status="Sent" if sent_user else f"Failed: {err_msg_user}"
             )
             db.add(user_email)
             
@@ -957,7 +957,7 @@ def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: 
                 f"Best,\nTeam Progress Tracker Notification System"
             )
             # Send real email to the admin
-            sent_admin = send_email_smtp(
+            sent_admin, err_msg_admin = send_email_smtp(
                 admin_email, 
                 f"Missing Log Alert: {user.username}", 
                 admin_body,
@@ -970,7 +970,7 @@ def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: 
                 recipient_email=admin_email,
                 subject=f"Missing Log Alert: {user.username}",
                 body=admin_body,
-                status="Sent" if sent_admin else "Failed"
+                status="Sent" if sent_admin else f"Failed: {err_msg_admin}"
             )
             db.add(admin_email_rec)
             
@@ -1011,7 +1011,7 @@ def trigger_broadcast_email(
         if not user.email:
             continue
             
-        sent = send_email_smtp(
+        sent, err_msg = send_email_smtp(
             user.email,
             broadcast_data.subject,
             broadcast_data.body,
@@ -1025,7 +1025,7 @@ def trigger_broadcast_email(
             recipient_email=user.email,
             subject=broadcast_data.subject,
             body=broadcast_data.body,
-            status="Sent" if sent else "Failed"
+            status="Sent" if sent else f"Failed: {err_msg}"
         )
         db.add(email_log)
         
@@ -1046,7 +1046,7 @@ def trigger_broadcast_email(
     if failed_count > 0 and sent_count == 0:
         raise HTTPException(
             status_code=500, 
-            detail="Failed to send any emails. Please check your SMTP credentials in Settings."
+            detail=f"Failed to send emails. Connection details check failed: {err_msg}. Please check your SMTP credentials in Settings."
         )
         
     return {
