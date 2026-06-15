@@ -3163,6 +3163,7 @@ export function AdminSettings() {
   const [smtpPort, setSmtpPort] = useState('587');
   const [smtpUser, setSmtpUser] = useState('');
   const [smtpPassword, setSmtpPassword] = useState('');
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
 
   // Broadcast States
   const [broadcastSubject, setBroadcastSubject] = useState('');
@@ -3362,15 +3363,37 @@ export function AdminSettings() {
 
                 <div className="form-group">
                   <label className="form-label" htmlFor="smtp-password-input">Google App Password (16 chars)</label>
-                  <input 
-                    id="smtp-password-input"
-                    type="password" 
-                    placeholder="e.g. abcd efgh ijkl mnop"
-                    className="form-input" 
-                    value={smtpPassword}
-                    onChange={(e) => setSmtpPassword(e.target.value)}
-                    disabled={saving}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      id="smtp-password-input"
+                      type={showSmtpPassword ? "text" : "password"} 
+                      placeholder="e.g. abcd efgh ijkl mnop"
+                      className="form-input" 
+                      style={{ paddingRight: '2.5rem' }}
+                      value={smtpPassword}
+                      onChange={(e) => setSmtpPassword(e.target.value)}
+                      disabled={saving}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        padding: 0,
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      {showSmtpPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
 

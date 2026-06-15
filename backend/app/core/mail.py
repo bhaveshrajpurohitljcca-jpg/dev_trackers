@@ -22,6 +22,18 @@ def send_email_smtp(
     user = smtp_user or settings.SMTP_USER
     password = smtp_password or settings.SMTP_PASSWORD
 
+    # Force IPv4 resolution to bypass IPv6 'Network is unreachable' errors on hosts (like Render)
+    original_host = host
+    import socket
+    try:
+        addr_info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+        if addr_info:
+            # Use the first IPv4 address returned
+            host = addr_info[0][4][0]
+            logger.info(f"Forced IPv4 resolution: resolved {original_host} to {host}")
+    except Exception as dns_err:
+        logger.warning(f"Could not force IPv4 resolution for {original_host}: {dns_err}")
+
     # Check if SMTP settings are configured
     if not user or not password:
         err = "SMTP credentials not configured"
@@ -39,13 +51,13 @@ def send_email_smtp(
         
         # Connect and send
         if port == 465:
-            logger.info(f"Connecting to SMTP SSL server {host}:{port} with 10s timeout...")
-            server = smtplib.SMTP_SSL(host, port, timeout=10)
+            logger.info(f"Connecting to SMTP SSL server {host}:{port} with 10s timeout (hostname: {original_host})...")
+            server = smtplib.SMTP_SSL(host, port, timeout=10, server_hostname=original_host)
         else:
             logger.info(f"Connecting to SMTP server {host}:{port} with 10s timeout...")
             server = smtplib.SMTP(host, port, timeout=10)
             try:
-                server.starttls()  # Upgrade connection to secure TLS
+                server.starttls(server_hostname=original_host)  # Upgrade connection to secure TLS
             except Exception as tls_err:
                 logger.warning(f"STARTTLS failed or not supported: {str(tls_err)}")
         
