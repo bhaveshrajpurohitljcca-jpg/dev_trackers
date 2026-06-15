@@ -10,6 +10,7 @@ from jose import jwt, JWTError
 from app.db.session import engine, Base, get_db
 from app.core.config import settings
 from app.core.security import verify_password, create_access_token
+from app.core.mail import send_email_smtp
 from app.core import security
 from app import models, schemas, crud
 
@@ -842,11 +843,13 @@ def trigger_daily_reminders(db: Session = Depends(get_db), current_admin: models
                 f"Your current streak is {streak_val} days! Keep it up.\n\n"
                 f"Best,\nTeam Progress Tracker"
             )
+            # Send real email via SMTP
+            sent = send_email_smtp(user.email, "Reminder: Submit your work log today!", body)
             email_log = models.EmailLog(
                 recipient_email=user.email,
                 subject="Reminder: Submit your work log today!",
                 body=body,
-                status="Sent"
+                status="Sent" if sent else "Failed"
             )
             db.add(email_log)
             sent_count += 1
@@ -890,11 +893,13 @@ def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: 
                 f"Please update your logging details as soon as possible.\n\n"
                 f"Best,\nTeam Progress Tracker"
             )
+            # Send real email to the user
+            sent_user = send_email_smtp(user.email, f"Missing Daily Work Log - {today}", user_body)
             user_email = models.EmailLog(
                 recipient_email=user.email,
                 subject=f"Missing Daily Work Log - {today}",
                 body=user_body,
-                status="Sent"
+                status="Sent" if sent_user else "Failed"
             )
             db.add(user_email)
             
@@ -905,11 +910,13 @@ def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: 
                 f"The configured deadline was {deadline_time}.\n\n"
                 f"Best,\nTeam Progress Tracker Notification System"
             )
+            # Send real email to the admin
+            sent_admin = send_email_smtp(admin_email, f"Missing Log Alert: {user.username}", admin_body)
             admin_email_rec = models.EmailLog(
                 recipient_email=admin_email,
                 subject=f"Missing Log Alert: {user.username}",
                 body=admin_body,
-                status="Sent"
+                status="Sent" if sent_admin else "Failed"
             )
             db.add(admin_email_rec)
             
