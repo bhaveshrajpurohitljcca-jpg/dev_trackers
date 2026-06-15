@@ -621,45 +621,6 @@ def seed_admin_user(db: Session):
         )
         create_user(db, admin_create)
         
-    # Seed default user "bhavesh"
-    db_user1 = db.query(models.User).filter(models.User.username == "bhavesh").first()
-    if not db_user1:
-        user_create = schemas.UserCreate(
-            full_name="Bhavesh Rajpurohit",
-            username="bhavesh",
-            email="bhavesh@tracker.com",
-            password="user123",
-            role="user",
-            primary_team="Backend Development",
-            secondary_team="Database",
-            is_active=True
-        )
-        db_user = create_user(db, user_create)
-        
-        # Assign default roadmaps (Python, SQL, FastAPI, PostgreSQL, React, TypeScript)
-        tech_names = ["Python", "SQL", "FastAPI", "PostgreSQL", "React", "TypeScript"]
-        techs = db.query(models.Technology).filter(models.Technology.name.in_(tech_names)).all()
-        assign_roadmap(db, db_user.id, [t.id for t in techs])
-        
-    # Seed default user "rahul"
-    db_user2 = db.query(models.User).filter(models.User.username == "rahul").first()
-    if not db_user2:
-        user_create = schemas.UserCreate(
-            full_name="Rahul Sharma",
-            username="rahul",
-            email="rahul@tracker.com",
-            password="user123",
-            role="user",
-            primary_team="Java Development",
-            is_active=True
-        )
-        db_user = create_user(db, user_create)
-        
-        # Assign default roadmaps (Java, Spring Boot, MySQL)
-        tech_names = ["Java", "Spring Boot", "MySQL"]
-        techs = db.query(models.Technology).filter(models.Technology.name.in_(tech_names)).all()
-        assign_roadmap(db, db_user.id, [t.id for t in techs])
-        
     db.commit()
 
 def run_db_seeding(db: Session):

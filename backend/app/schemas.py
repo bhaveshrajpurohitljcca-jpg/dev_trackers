@@ -141,6 +141,10 @@ class BroadcastEmail(BaseModel):
     subject: str = Field(..., min_length=1, max_length=200)
     body: str = Field(..., min_length=1)
 
+class DeleteEmailLogsRequest(BaseModel):
+    ids: Optional[List[int]] = None
+    delete_all: bool = False
+
 # Completed topic schemas
 class CompletedTopicResponse(BaseModel):
     id: int

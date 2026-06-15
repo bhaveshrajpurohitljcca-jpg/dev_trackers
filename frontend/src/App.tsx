@@ -26,7 +26,6 @@ import {
   X, 
   Flame, 
   BookOpen, 
-  Bell, 
   AlertCircle, 
   Trash2, 
   Edit2, 
@@ -40,7 +39,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { api } from './services/api';
-import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, Achievement, EmailLog, Activity } from './services/api';
+import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, Achievement, EmailLog } from './services/api';
 
 // ============================================================================
 // CONTEXT / STATE PROVIDER
@@ -569,20 +568,46 @@ export function UserDashboard() {
 
   return (
     <Layout>
-      <div className="page-header">
-        <div className="page-title-section">
-          <h1 className="page-title">Welcome back, {data?.full_name}!</h1>
-          <span className="page-subtitle">Here is your learning and coding progress overview.</span>
+      <div style={{ 
+        marginBottom: '2rem', 
+        padding: '2.5rem 2rem', 
+        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%)', 
+        borderRadius: '20px', 
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '1.5rem'
+      }}>
+        <div>
+          <h1 style={{ 
+            fontSize: '3rem', 
+            fontWeight: '800', 
+            margin: 0, 
+            background: 'linear-gradient(90deg, #6366f1 0%, #ec4899 100%)', 
+            WebkitBackgroundClip: 'text', 
+            WebkitTextFillColor: 'transparent',
+            letterSpacing: '-0.02em',
+            lineHeight: '1.2'
+          }}>
+            Let's Do It Together.
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', fontSize: '1rem', fontWeight: 500 }}>
+            Welcome back, {data?.full_name}! Here is your learning and coding progress overview.
+          </p>
         </div>
-        {data?.logged_today ? (
-          <div className="badge badge-active" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
-            <CheckCircle2 size={16} /> Logged Today
-          </div>
-        ) : (
-          <div className="badge badge-other" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--color-warning)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-            <AlertCircle size={16} /> Pending Log
-          </div>
-        )}
+        <div>
+          {data?.logged_today ? (
+            <div className="badge badge-active" style={{ fontSize: '0.85rem', padding: '0.6rem 1.2rem', borderRadius: '10px' }}>
+              <CheckCircle2 size={16} /> Logged Today
+            </div>
+          ) : (
+            <div className="badge badge-other" style={{ fontSize: '0.85rem', padding: '0.6rem 1.2rem', borderRadius: '10px', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--color-warning)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+              <AlertCircle size={16} /> Pending Log
+            </div>
+          )}
+        </div>
       </div>
 
       {/* STATS CARDS */}
@@ -598,11 +623,11 @@ export function UserDashboard() {
 
         <div className="glass-card stat-card">
           <div className="stat-header">
-            <span className="stat-title">Longest Streak</span>
-            <div className="stat-icon" style={{ color: 'var(--color-secondary)' }}><Award size={18} /></div>
+            <span className="stat-title">Hours Submitted (Today)</span>
+            <div className="stat-icon" style={{ color: 'var(--color-secondary)' }}><Clock size={18} /></div>
           </div>
-          <span className="stat-value">{data?.longest_streak} days</span>
-          <span className="stat-desc">All-time record</span>
+          <span className="stat-value">{data?.today_hours || 0} hrs</span>
+          <span className="stat-desc">Coding: {data?.today_coding_hours || 0}h | Learning: {data?.today_learning_hours || 0}h</span>
         </div>
 
         <div className="glass-card stat-card">
@@ -610,7 +635,7 @@ export function UserDashboard() {
             <span className="stat-title">Total Hours</span>
             <div className="stat-icon" style={{ color: 'var(--color-success)' }}><Clock size={18} /></div>
           </div>
-          <span className="stat-value">{data?.total_hours.toFixed(1)} hrs</span>
+          <span className="stat-value">{data?.total_hours?.toFixed(1)} hrs</span>
           <span className="stat-desc">Accumulated time</span>
         </div>
 
@@ -743,37 +768,6 @@ export function UserDashboard() {
             </div>
           </div>
 
-          {/* Recent Activity */}
-          <div className="glass-card section-card">
-            <h3 className="section-title">Recent Activity</h3>
-            <div className="activity-feed-list" style={{ marginTop: '0.5rem' }}>
-              {data?.recent_activities?.length > 0 ? (
-                data.recent_activities.map((act: Activity) => (
-                  <div className="activity-item" key={act.id}>
-                    <div className="activity-icon-container">
-                      {act.activity_type === 'achievement_unlocked' ? (
-                        <Award size={14} style={{ color: 'var(--color-warning)' }} />
-                      ) : act.activity_type === 'log_hours' ? (
-                        <Clock size={14} style={{ color: 'var(--color-success)' }} />
-                      ) : (
-                        <CheckCircle2 size={14} style={{ color: 'var(--color-secondary)' }} />
-                      )}
-                    </div>
-                    <div className="activity-content">
-                      <p className="activity-text" style={{ fontSize: '0.85rem' }}>
-                        <strong>{act.user_name}</strong> {act.detail.replace(`User ${act.user_name} `, '')}
-                      </p>
-                      <span className="activity-time">{new Date(act.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="empty-state" style={{ padding: '1.5rem 0' }}>
-                  <p style={{ fontSize: '0.85rem' }}>No recent activity.</p>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     </Layout>
@@ -836,17 +830,41 @@ export function AdminDashboard() {
   return (
     <Layout>
       {ToastComponent}
-      <div className="page-header">
-        <div className="page-title-section">
-          <h1 className="page-title">Admin Dashboard</h1>
-          <span className="page-subtitle">Track team activity, log metrics, and schedule notifications.</span>
+      <div style={{ 
+        marginBottom: '2rem', 
+        padding: '2.5rem 2rem', 
+        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%)', 
+        borderRadius: '20px', 
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '1.5rem'
+      }}>
+        <div>
+          <h1 style={{ 
+            fontSize: '3rem', 
+            fontWeight: '800', 
+            margin: 0, 
+            background: 'linear-gradient(90deg, #6366f1 0%, #ec4899 100%)', 
+            WebkitBackgroundClip: 'text', 
+            WebkitTextFillColor: 'transparent',
+            letterSpacing: '-0.02em',
+            lineHeight: '1.2'
+          }}>
+            Let's Do It Together.
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', fontSize: '1rem', fontWeight: 500 }}>
+            Admin Control Panel — Monitor activity, send notifications, and configure global system rules.
+          </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button 
             className="btn btn-secondary" 
             onClick={handleTriggerReminders}
             disabled={triggering !== null}
-            style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+            style={{ fontSize: '0.85rem', padding: '0.6rem 1.2rem', borderRadius: '10px' }}
           >
             {triggering === 'reminder' ? 'Sending...' : 'Send Reminders'}
           </button>
@@ -854,7 +872,7 @@ export function AdminDashboard() {
             className="btn btn-primary" 
             onClick={handleTriggerDeadlineCheck}
             disabled={triggering !== null}
-            style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+            style={{ fontSize: '0.85rem', padding: '0.6rem 1.2rem', borderRadius: '10px' }}
           >
             {triggering === 'deadline' ? 'Auditing...' : 'Check Deadlines'}
           </button>
@@ -1029,39 +1047,7 @@ export function AdminDashboard() {
           </div>
         </div>
 
-        {/* Right Column: Global Activities */}
-        <div className="glass-card section-card">
-          <h3 className="section-title">Recent Activity Feed</h3>
-          <div className="activity-feed-list" style={{ marginTop: '0.5rem', maxHeight: '380px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-            {data?.recent_activities?.length > 0 ? (
-              data.recent_activities.map((act: Activity) => (
-                <div className="activity-item" key={act.id}>
-                  <div className="activity-icon-container">
-                    {act.activity_type === 'achievement_unlocked' ? (
-                      <Award size={14} style={{ color: 'var(--color-warning)' }} />
-                    ) : act.activity_type.startsWith('system') ? (
-                      <Bell size={14} style={{ color: 'var(--color-primary)' }} />
-                    ) : act.activity_type === 'log_hours' ? (
-                      <Clock size={14} style={{ color: 'var(--color-success)' }} />
-                    ) : (
-                      <CheckCircle2 size={14} style={{ color: 'var(--color-secondary)' }} />
-                    )}
-                  </div>
-                  <div className="activity-content">
-                    <p className="activity-text" style={{ fontSize: '0.85rem' }}>
-                      <strong>{act.user_name}</strong> {act.detail.replace(`User ${act.user_name} `, '').replace(`Bhavesh Rajpurohit `, '').replace(`Rahul Sharma `, '')}
-                    </p>
-                    <span className="activity-time">{new Date(act.created_at).toLocaleString()}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state" style={{ padding: '1.5rem 0' }}>
-                <p style={{ fontSize: '0.85rem' }}>No system activity.</p>
-              </div>
-            )}
-          </div>
-        </div>
+
       </div>
     </Layout>
   );
@@ -3170,6 +3156,11 @@ export function AdminSettings() {
   const [broadcastBody, setBroadcastBody] = useState('');
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
+  // Log Selection & Deletion States
+  const [visibleLogsCount, setVisibleLogsCount] = useState(10);
+  const [selectedLogIds, setSelectedLogIds] = useState<number[]>([]);
+  const [deletingLogs, setDeletingLogs] = useState(false);
+
   const fetchData = async () => {
     try {
       const s = await api.adminGetSettings();
@@ -3182,6 +3173,7 @@ export function AdminSettings() {
       setSmtpUser(s.smtp_user || '');
       setSmtpPassword(s.smtp_password || '');
       setEmailLogs(l);
+      setSelectedLogIds([]); // Clear selections on refresh
     } catch (err) {
       console.error(err);
     } finally {
@@ -3250,6 +3242,60 @@ export function AdminSettings() {
       showError(err.message || 'Failed to send broadcast email. Verify your SMTP settings.');
     } finally {
       setSendingBroadcast(false);
+    }
+  };
+
+  const handleDeleteSelectedLogs = async () => {
+    if (selectedLogIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete the ${selectedLogIds.length} selected email logs?`)) return;
+    
+    setDeletingLogs(true);
+    try {
+      await api.adminDeleteEmailLogs(selectedLogIds, false);
+      showSuccess('Selected email logs deleted successfully.');
+      fetchData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to delete selected logs');
+    } finally {
+      setDeletingLogs(false);
+    }
+  };
+
+  const handleDeleteAllLogs = async () => {
+    if (!window.confirm('Are you sure you want to delete ALL email logs? This cannot be undone.')) return;
+    
+    setDeletingLogs(true);
+    try {
+      await api.adminDeleteEmailLogs(undefined, true);
+      showSuccess('All email logs cleared successfully.');
+      fetchData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to clear email logs');
+    } finally {
+      setDeletingLogs(false);
+    }
+  };
+
+  const handleToggleLogSelection = (id: number) => {
+    if (selectedLogIds.includes(id)) {
+      setSelectedLogIds(selectedLogIds.filter(logId => logId !== id));
+    } else {
+      setSelectedLogIds([...selectedLogIds, id]);
+    }
+  };
+
+  const handleSelectAllVisibleLogs = (visibleLogIds: number[]) => {
+    const allSelected = visibleLogIds.every(id => selectedLogIds.includes(id));
+    if (allSelected) {
+      setSelectedLogIds(selectedLogIds.filter(id => !visibleLogIds.includes(id)));
+    } else {
+      const newSelections = [...selectedLogIds];
+      visibleLogIds.forEach(id => {
+        if (!newSelections.includes(id)) {
+          newSelections.push(id);
+        }
+      });
+      setSelectedLogIds(newSelections);
     }
   };
 
@@ -3450,23 +3496,74 @@ export function AdminSettings() {
         </div>
 
         {/* Right Column: Email logs */}
-        <div className="glass-card section-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <h3 className="section-title">
-            <Mail size={18} style={{ color: 'var(--color-secondary)' }} /> Outbox Mail Logs (SMTP)
-          </h3>
+        <div className="glass-card section-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '650px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+            <h3 className="section-title" style={{ margin: 0 }}>
+              <Mail size={18} style={{ color: 'var(--color-secondary)' }} /> Outbox Mail Logs (SMTP)
+            </h3>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button 
+                className="btn btn-secondary" 
+                style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'rgb(239, 68, 68)', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                onClick={handleDeleteSelectedLogs}
+                disabled={selectedLogIds.length === 0 || deletingLogs}
+              >
+                Delete Selected ({selectedLogIds.length})
+              </button>
+              <button 
+                className="btn btn-secondary" 
+                style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: 'rgb(239, 68, 68)', border: '1px solid rgba(239, 68, 68, 0.4)' }}
+                onClick={handleDeleteAllLogs}
+                disabled={emailLogs.length === 0 || deletingLogs}
+              >
+                Delete All
+              </button>
+            </div>
+          </div>
           
-          <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px', display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem', paddingRight: '0.25rem' }}>
+          {emailLogs.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', fontSize: '0.8rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+              <input 
+                type="checkbox"
+                id="select-all-visible"
+                checked={emailLogs.slice(0, visibleLogsCount).every(log => selectedLogIds.includes(log.id))}
+                onChange={() => handleSelectAllVisibleLogs(emailLogs.slice(0, visibleLogsCount).map(l => l.id))}
+                style={{ cursor: 'pointer' }}
+              />
+              <label htmlFor="select-all-visible" style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                Select All Visible ({Math.min(visibleLogsCount, emailLogs.length)})
+              </label>
+            </div>
+          )}
+
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: '550px', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
             {emailLogs.length > 0 ? (
-              emailLogs.map((log) => (
-                <div key={log.id} style={{ border: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.01)', padding: '0.75rem', borderRadius: '10px', fontSize: '0.8rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                    <strong style={{ color: 'var(--color-secondary)' }}>To: {log.recipient_email}</strong>
-                    <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>{log.status}</span>
+              emailLogs.slice(0, visibleLogsCount).map((log) => (
+                <div key={log.id} style={{ display: 'flex', gap: '0.75rem', border: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.01)', padding: '0.75rem', borderRadius: '10px', fontSize: '0.8rem' }}>
+                  <div style={{ paddingTop: '0.15rem' }}>
+                    <input 
+                      type="checkbox"
+                      checked={selectedLogIds.includes(log.id)}
+                      onChange={() => handleToggleLogSelection(log.id)}
+                      style={{ cursor: 'pointer', transform: 'scale(1.1)' }}
+                    />
                   </div>
-                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{log.subject}</div>
-                  <p style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', fontSize: '0.75rem', fontFamily: 'monospace', padding: '0.4rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>{log.body}</p>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', textAlign: 'right' }}>
-                    {new Date(log.created_at).toLocaleString()}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', flexWrap: 'wrap', gap: '0.25rem' }}>
+                      <strong style={{ color: 'var(--color-secondary)' }}>To: {log.recipient_email}</strong>
+                      <span style={{ 
+                        color: log.status === 'Sent' ? 'var(--color-success)' : 'rgb(239, 68, 68)', 
+                        fontWeight: 600,
+                        fontSize: '0.75rem'
+                      }}>
+                        {log.status}
+                      </span>
+                    </div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{log.subject}</div>
+                    <p style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', fontSize: '0.75rem', fontFamily: 'monospace', padding: '0.4rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>{log.body}</p>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', textAlign: 'right' }}>
+                      {new Date(log.created_at).toLocaleString()}
+                    </div>
                   </div>
                 </div>
               ))
@@ -3477,6 +3574,16 @@ export function AdminSettings() {
               </div>
             )}
           </div>
+
+          {emailLogs.length > visibleLogsCount && (
+            <button 
+              className="btn btn-secondary" 
+              style={{ width: '100%', marginTop: '1rem', fontSize: '0.8rem', padding: '0.5rem' }} 
+              onClick={() => setVisibleLogsCount(prev => prev + 10)}
+            >
+              Load More Logs
+            </button>
+          )}
         </div>
       </div>
     </Layout>

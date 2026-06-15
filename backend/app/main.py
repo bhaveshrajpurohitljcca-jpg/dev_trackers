@@ -323,6 +323,19 @@ def admin_update_settings(settings_data: schemas.SettingsUpdate, db: Session = D
 def admin_get_email_logs(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
     return db.query(models.EmailLog).order_by(models.EmailLog.created_at.desc()).limit(100).all()
 
+@app.delete(f"{settings.API_V1_STR}/admin/email-logs")
+def admin_delete_email_logs(payload: schemas.DeleteEmailLogsRequest, db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
+    if payload.delete_all:
+        db.query(models.EmailLog).delete()
+        db.commit()
+        return {"detail": "All email logs deleted successfully."}
+    elif payload.ids:
+        db.query(models.EmailLog).filter(models.EmailLog.id.in_(payload.ids)).delete(synchronize_session=False)
+        db.commit()
+        return {"detail": f"Successfully deleted {len(payload.ids)} email logs."}
+    else:
+        raise HTTPException(status_code=400, detail="Either 'ids' list or 'delete_all=True' must be provided.")
+
 # ==========================================
 # WORK LOGS
 # ==========================================

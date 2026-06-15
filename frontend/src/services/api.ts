@@ -252,6 +252,13 @@ export const api = {
     return request<EmailLog[]>('/admin/email-logs');
   },
 
+  async adminDeleteEmailLogs(ids?: number[], deleteAll = false): Promise<{ detail: string }> {
+    return request<{ detail: string }>('/admin/email-logs', {
+      method: 'DELETE',
+      body: JSON.stringify({ ids, delete_all: deleteAll }),
+    });
+  },
+
   // Work Logs
   async logWork(log: Omit<DailyLog, 'id' | 'user_id' | 'created_at'>): Promise<DailyLog> {
     return request<DailyLog>('/logs', {
