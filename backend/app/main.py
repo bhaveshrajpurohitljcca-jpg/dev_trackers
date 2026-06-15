@@ -605,8 +605,31 @@ def get_user_achievements(db: Session = Depends(get_db), current_user: models.Us
     achievements = db.query(models.Achievement).all()
     unlocked_ids = [ua.achievement_id for ua in current_user.achievements]
     
+    # Map primary/secondary teams to technologies they are responsible for
+    allowed_techs = []
+    user_teams = []
+    if current_user.primary_team:
+        user_teams.append(current_user.primary_team.lower())
+    if current_user.secondary_team:
+        user_teams.append(current_user.secondary_team.lower())
+        
+    for team in user_teams:
+        if "front" in team:
+            allowed_techs.extend(["html", "css", "javascript", "react", "typescript"])
+        if "back" in team:
+            allowed_techs.extend(["python", "fastapi"])
+        if "data" in team or "db" in team or "sql" in team or "postgre" in team:
+            allowed_techs.extend(["sql", "postgresql"])
+
     list_data = []
     for ach in achievements:
+        # Filter completed_tech achievements based on team mapping
+        if ach.criteria_type == "completed_tech":
+            tech_name = ach.criteria_value.lower()
+            # If the current user is not admin, they should only see the achievements of their team's technologies.
+            if allowed_techs and tech_name not in allowed_techs and current_user.role != "admin":
+                continue
+                
         unlocked_rec = next((ua for ua in current_user.achievements if ua.achievement_id == ach.id), None)
         list_data.append({
             "id": ach.id,

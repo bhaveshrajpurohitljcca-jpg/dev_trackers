@@ -550,51 +550,111 @@ def seed_default_technologies(db: Session):
     techs_data = [
         {
             "name": "Python",
-            "description": "General purpose programming language",
-            "topics": ["Variables", "Loops", "Functions", "OOP", "File Handling", "Exception Handling", "Decorators", "Generators"]
+            "description": "Programming Language (Backend Stack) - 4-6 Weeks",
+            "topics": [
+                "Basics: Variables, Data Types, Operators, If-Else, Loops, Functions",
+                "Intermediate: Lists, Tuples, Dictionaries, Sets",
+                "Important: OOP (Classes & Objects), Inheritance, Exception Handling, File Handling",
+                "Advanced: Modules, Packages, Virtual Environment, Async & Await, Type Hints"
+            ]
         },
         {
             "name": "SQL",
-            "description": "Structured Query Language for database management",
-            "topics": ["Basics & Select", "Filters & Operators", "Joins", "Aggregations", "Subqueries", "Indexes", "Transactions"]
-        },
-        {
-            "name": "FastAPI",
-            "description": "Modern, fast web framework for building APIs with Python",
-            "topics": ["Routing", "Path/Query Parameters", "Pydantic Models", "Dependencies", "Database Integration", "JWT Authentication", "CORS & Security"]
+            "description": "Structured Query Language (Database Stack) - 2-3 Weeks",
+            "topics": [
+                "Must Know: CREATE, INSERT, SELECT, UPDATE, DELETE",
+                "Then: WHERE, ORDER BY, GROUP BY, HAVING, LIMIT",
+                "Most Important: INNER JOIN, LEFT JOIN, RIGHT JOIN",
+                "Then: Aggregate Functions, Foreign Keys, Constraints, Transactions"
+            ]
         },
         {
             "name": "PostgreSQL",
-            "description": "Advanced open source relational database",
-            "topics": ["Data Types", "Constraints", "Views & Triggers", "Functions & Stored Procedures", "Performance Tuning"]
+            "description": "Relational Database Management System (Database Stack) - 1 Week",
+            "topics": [
+                "Learn: Installation, Databases, Tables, Relationships",
+                "Then: Primary Key, Foreign Key, Indexes, Constraints",
+                "Then: Backup, Restore"
+            ]
+        },
+        {
+            "name": "FastAPI",
+            "description": "Modern Web Framework for building APIs (Backend Stack) - 2-3 Weeks",
+            "topics": [
+                "Learn: Routes (GET, POST, PUT, DELETE)",
+                "Then: Request, Response",
+                "Then: CRUD APIs",
+                "Then: Pydantic Models",
+                "Then: File Upload",
+                "Then: Dependency Injection",
+                "Then: Authentication",
+                "Then: WebSockets"
+            ]
+        },
+        {
+            "name": "HTML",
+            "description": "HyperText Markup Language (Frontend Stack) - 3-5 Days",
+            "topics": [
+                "Learn: Head, Body, Div, Span",
+                "Then: Forms, Input, Button, Table, Image, Video, Semantic Tags"
+            ]
+        },
+        {
+            "name": "CSS",
+            "description": "Cascading Style Sheets (Frontend Stack) - 1-2 Weeks",
+            "topics": [
+                "Learn: Selectors, Margin, Padding, Border, Position",
+                "Then: Flexbox, Grid",
+                "Then: Responsive Design"
+            ]
+        },
+        {
+            "name": "JavaScript",
+            "description": "Programming Language for Web Development (Frontend Stack) - 3-4 Weeks",
+            "topics": [
+                "Basics: Variables, Functions, Arrays, Objects",
+                "Then: Loops, DOM",
+                "Then: ES6, Arrow Functions, Destructuring, Spread Operator",
+                "Then: Async Await, Promises, Fetch API"
+            ]
         },
         {
             "name": "React",
-            "description": "JavaScript library for building user interfaces",
-            "topics": ["JSX", "Components & Props", "State & Hook (useState)", "Effect Hook (useEffect)", "Context API", "Custom Hooks", "Performance Optimization"]
+            "description": "JavaScript Library for Building UI (Frontend Stack) - 4-5 Weeks",
+            "topics": [
+                "Learn: Components, JSX, Props, State",
+                "Then: Hooks (useState, useEffect)",
+                "Then: Forms, Lists, Events",
+                "Then: React Router",
+                "Then: API Calls",
+                "Then: Context API"
+            ]
         },
         {
             "name": "TypeScript",
-            "description": "Typed superset of JavaScript",
-            "topics": ["Types & Interfaces", "Generics", "Enums", "Union & Intersection Types", "TS Config & Compiler Settings"]
-        },
-        {
-            "name": "Java",
-            "description": "Object-oriented, class-based language",
-            "topics": ["Syntax & Control Flow", "Classes & Interfaces", "Inheritance & Polymorphism", "Collections Framework", "Streams API & Lambdas", "Multithreading"]
-        },
-        {
-            "name": "Spring Boot",
-            "description": "Java-based framework for enterprise-ready applications",
-            "topics": ["Dependency Injection", "Spring MVC", "Spring Data JPA", "Spring Security", "REST API Development", "Testing"]
-        },
-        {
-            "name": "MySQL",
-            "description": "Popular open-source relational database",
-            "topics": ["Table Design", "CRUD Queries", "Index Optimization", "Stored Procedures"]
+            "description": "Typed Superset of JavaScript (Frontend Stack) - 1-2 Weeks",
+            "topics": [
+                "Learn: Types, Interfaces, Enums, Generics, Type Aliases"
+            ]
         }
     ]
     
+    # 1. Clean obsolete technologies and their achievements
+    new_tech_names = [t["name"] for t in techs_data]
+    obsolete_techs = db.query(models.Technology).filter(~models.Technology.name.in_(new_tech_names)).all()
+    for ot in obsolete_techs:
+        db.delete(ot)
+    db.commit()
+    
+    obsolete_achievements = db.query(models.Achievement).filter(
+        models.Achievement.criteria_type == "completed_tech",
+        ~models.Achievement.criteria_value.in_(new_tech_names)
+    ).all()
+    for oa in obsolete_achievements:
+        db.delete(oa)
+    db.commit()
+    
+    # 2. Add or update technologies and sync their topics
     for t_data in techs_data:
         db_tech = db.query(models.Technology).filter(models.Technology.name == t_data["name"]).first()
         if not db_tech:
@@ -602,9 +662,30 @@ def seed_default_technologies(db: Session):
             db.add(db_tech)
             db.commit()
             db.refresh(db_tech)
-            for idx, name in enumerate(t_data["topics"]):
+        else:
+            if db_tech.description != t_data["description"]:
+                db_tech.description = t_data["description"]
+                db.commit()
+                
+        # Sync topics for this technology
+        existing_topics = db.query(models.Topic).filter(models.Topic.technology_id == db_tech.id).all()
+        existing_names_map = {t.name: t for t in existing_topics}
+        
+        # Delete topics that are not in the new syllabus
+        for ext_t in existing_topics:
+            if ext_t.name not in t_data["topics"]:
+                db.delete(ext_t)
+        db.commit()
+        
+        # Add new or update existing topic sequences
+        for idx, name in enumerate(t_data["topics"]):
+            if name in existing_names_map:
+                existing_names_map[name].sequence_order = idx
+            else:
                 db_topic = models.Topic(technology_id=db_tech.id, name=name, sequence_order=idx)
                 db.add(db_topic)
+        db.commit()
+        
     db.commit()
 
 def seed_admin_user(db: Session):
