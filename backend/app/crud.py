@@ -93,6 +93,7 @@ def update_user(db: Session, user_id: int, user_update: schemas.UserUpdate):
     
     log_activity(db, user_id=db_user.id, user_name=db_user.full_name, 
                  activity_type="user_updated", detail=f"User profile was updated")
+    db.commit()
     return db_user
 
 def delete_user(db: Session, user_id: int):
