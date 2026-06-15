@@ -3158,6 +3158,17 @@ export function AdminSettings() {
   const [reminder, setReminder] = useState('');
   const [grace, setGrace] = useState('');
 
+  // SMTP States
+  const [smtpHost, setSmtpHost] = useState('smtp.gmail.com');
+  const [smtpPort, setSmtpPort] = useState('587');
+  const [smtpUser, setSmtpUser] = useState('');
+  const [smtpPassword, setSmtpPassword] = useState('');
+
+  // Broadcast States
+  const [broadcastSubject, setBroadcastSubject] = useState('');
+  const [broadcastBody, setBroadcastBody] = useState('');
+  const [sendingBroadcast, setSendingBroadcast] = useState(false);
+
   const fetchData = async () => {
     try {
       const s = await api.adminGetSettings();
@@ -3165,6 +3176,10 @@ export function AdminSettings() {
       setDeadline(s.daily_log_deadline);
       setReminder(s.reminder_time);
       setGrace(s.grace_period_minutes.toString());
+      setSmtpHost(s.smtp_host || 'smtp.gmail.com');
+      setSmtpPort((s.smtp_port || 587).toString());
+      setSmtpUser(s.smtp_user || '');
+      setSmtpPassword(s.smtp_password || '');
       setEmailLogs(l);
     } catch (err) {
       console.error(err);
@@ -3190,12 +3205,22 @@ export function AdminSettings() {
       return;
     }
 
+    const p = parseInt(smtpPort);
+    if (isNaN(p) || p <= 0) {
+      showError('SMTP port must be a valid positive number');
+      return;
+    }
+
     setSaving(true);
     try {
       await api.adminUpdateSettings({
         daily_log_deadline: deadline,
         reminder_time: reminder,
-        grace_period_minutes: g
+        grace_period_minutes: g,
+        smtp_host: smtpHost,
+        smtp_port: p,
+        smtp_user: smtpUser,
+        smtp_password: smtpPassword
       });
       showSuccess('System settings successfully updated!');
       fetchData();
@@ -3203,6 +3228,27 @@ export function AdminSettings() {
       showError(err.message || 'Failed to update settings');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBroadcastSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!broadcastSubject || !broadcastBody) {
+      showError('Please enter both subject and message body');
+      return;
+    }
+
+    setSendingBroadcast(true);
+    try {
+      const res = await api.triggerBroadcast(broadcastSubject, broadcastBody);
+      showSuccess(res.detail);
+      setBroadcastSubject('');
+      setBroadcastBody('');
+      fetchData(); // Refresh email logs to show sent outbox
+    } catch (err: any) {
+      showError(err.message || 'Failed to send broadcast email. Verify your SMTP settings.');
+    } finally {
+      setSendingBroadcast(false);
     }
   };
 
@@ -3219,58 +3265,165 @@ export function AdminSettings() {
       </div>
 
       <div className="dash-grid-details">
-        {/* Left Column: Settings Configuration */}
-        <div className="glass-card section-card">
-          <h3 className="section-title">
-            <Sliders size={18} style={{ color: 'var(--color-primary)' }} /> Deadline Configuration
-          </h3>
-          
-          <form onSubmit={handleSubmit} style={{ marginTop: '1.25rem' }}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="deadline-input">Daily Log Submission Deadline</label>
-              <input 
-                id="deadline-input"
-                type="text" 
-                placeholder="22:00"
-                className="form-input" 
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                disabled={saving}
-              />
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Format: HH:MM (24-hour clock)</span>
-            </div>
+        {/* Left Column: Settings Configuration & Broadcast */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          <div className="glass-card section-card">
+            <h3 className="section-title">
+              <Sliders size={18} style={{ color: 'var(--color-primary)' }} /> System Configuration
+            </h3>
+            
+            <form onSubmit={handleSubmit} style={{ marginTop: '1.25rem' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="deadline-input">Daily Log Submission Deadline</label>
+                <input 
+                  id="deadline-input"
+                  type="text" 
+                  placeholder="22:00"
+                  className="form-input" 
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  disabled={saving}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Format: HH:MM (24-hour clock)</span>
+              </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="reminder-input">Reminder Send Time</label>
-              <input 
-                id="reminder-input"
-                type="text" 
-                placeholder="21:30"
-                className="form-input" 
-                value={reminder}
-                onChange={(e) => setReminder(e.target.value)}
-                disabled={saving}
-              />
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Format: HH:MM (24-hour clock)</span>
-            </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="reminder-input">Reminder Send Time</label>
+                <input 
+                  id="reminder-input"
+                  type="text" 
+                  placeholder="21:30"
+                  className="form-input" 
+                  value={reminder}
+                  onChange={(e) => setReminder(e.target.value)}
+                  disabled={saving}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Format: HH:MM (24-hour clock)</span>
+              </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="grace-input">Grace Period (Minutes)</label>
-              <input 
-                id="grace-input"
-                type="number" 
-                className="form-input" 
-                value={grace}
-                onChange={(e) => setGrace(e.target.value)}
-                disabled={saving}
-              />
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Minutes to allow logs past deadline</span>
-            </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="grace-input">Grace Period (Minutes)</label>
+                <input 
+                  id="grace-input"
+                  type="number" 
+                  className="form-input" 
+                  value={grace}
+                  onChange={(e) => setGrace(e.target.value)}
+                  disabled={saving}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Minutes to allow logs past deadline</span>
+              </div>
 
-            <button className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }} type="submit" disabled={saving}>
-              {saving ? 'Saving...' : 'Save Settings'}
-            </button>
-          </form>
+              {/* SMTP Settings Segment */}
+              <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px dashed var(--border-color)' }}>
+                <h4 className="section-title" style={{ fontSize: '0.95rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Mail size={16} style={{ color: 'var(--color-secondary)' }} /> Admin Gmail SMTP Server
+                </h4>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: '1.4' }}>
+                  Provide the Gmail address and a 16-character Google <strong>App Password</strong> (generate this in Google Account &gt; Security &gt; 2-Step Verification &gt; App passwords) to send real outbox notifications.
+                </p>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="smtp-host-input">SMTP Server Host</label>
+                  <input 
+                    id="smtp-host-input"
+                    type="text" 
+                    className="form-input" 
+                    value={smtpHost}
+                    onChange={(e) => setSmtpHost(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="smtp-port-input">SMTP Server Port</label>
+                  <input 
+                    id="smtp-port-input"
+                    type="number" 
+                    className="form-input" 
+                    value={smtpPort}
+                    onChange={(e) => setSmtpPort(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="smtp-user-input">Sender Gmail Address (Admin)</label>
+                  <input 
+                    id="smtp-user-input"
+                    type="email" 
+                    placeholder="e.g. your-admin-email@gmail.com"
+                    className="form-input" 
+                    value={smtpUser}
+                    onChange={(e) => setSmtpUser(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="smtp-password-input">Google App Password (16 chars)</label>
+                  <input 
+                    id="smtp-password-input"
+                    type="password" 
+                    placeholder="e.g. abcd efgh ijkl mnop"
+                    className="form-input" 
+                    value={smtpPassword}
+                    onChange={(e) => setSmtpPassword(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+
+              <button className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }} type="submit" disabled={saving}>
+                {saving ? 'Saving...' : 'Save Settings'}
+              </button>
+            </form>
+          </div>
+
+          {/* Broadcast Form Card */}
+          <div className="glass-card section-card">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Mail size={18} style={{ color: 'var(--color-secondary)' }} /> Broadcast Manual Email
+            </h3>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: '1.4' }}>
+              Send an instant custom email broadcast to all active members in the team using the SMTP credentials configured above.
+            </p>
+            <form onSubmit={handleBroadcastSubmit}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="broadcast-subject">Subject</label>
+                <input 
+                  id="broadcast-subject"
+                  type="text" 
+                  placeholder="e.g. Urgent Update: Submit your pending logs"
+                  className="form-input" 
+                  value={broadcastSubject}
+                  onChange={(e) => setBroadcastSubject(e.target.value)}
+                  disabled={sendingBroadcast}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="broadcast-body">Message Content</label>
+                <textarea 
+                  id="broadcast-body"
+                  placeholder="Write your email body here..."
+                  className="form-input" 
+                  rows={4}
+                  style={{ resize: 'vertical', minHeight: '80px', fontFamily: 'inherit' }}
+                  value={broadcastBody}
+                  onChange={(e) => setBroadcastBody(e.target.value)}
+                  disabled={sendingBroadcast}
+                />
+              </div>
+              <button 
+                className="btn btn-secondary" 
+                style={{ width: '100%', marginTop: '1rem' }} 
+                type="submit" 
+                disabled={sendingBroadcast || !broadcastSubject || !broadcastBody}
+              >
+                {sendingBroadcast ? 'Sending Broadcast...' : 'Broadcast Email to All Users'}
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* Right Column: Email logs */}

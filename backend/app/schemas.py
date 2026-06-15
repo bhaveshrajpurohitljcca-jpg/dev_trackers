@@ -126,12 +126,20 @@ class SettingsUpdate(BaseModel):
     daily_log_deadline: str = Field(pattern=r"^\d{2}:\d{2}$")
     reminder_time: str = Field(pattern=r"^\d{2}:\d{2}$")
     grace_period_minutes: int = Field(ge=0, le=120)
+    smtp_host: Optional[str] = "smtp.gmail.com"
+    smtp_port: Optional[int] = 587
+    smtp_user: Optional[str] = ""
+    smtp_password: Optional[str] = ""
 
 class SettingsResponse(SettingsUpdate):
     id: int
 
     class Config:
         from_attributes = True
+
+class BroadcastEmail(BaseModel):
+    subject: str = Field(..., min_length=1, max_length=200)
+    body: str = Field(..., min_length=1)
 
 # Completed topic schemas
 class CompletedTopicResponse(BaseModel):

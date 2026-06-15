@@ -106,6 +106,10 @@ export interface SystemSettings {
   daily_log_deadline: string;
   reminder_time: string;
   grace_period_minutes: number;
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_user?: string;
+  smtp_password?: string;
 }
 
 export interface EmailLog {
@@ -355,5 +359,12 @@ export const api = {
 
   async triggerDeadlineCheck(): Promise<{ detail: string }> {
     return request<{ detail: string }>('/notifications/deadline-check', { method: 'POST' });
+  },
+
+  async triggerBroadcast(subject: string, body: string): Promise<{ detail: string }> {
+    return request<{ detail: string }>('/notifications/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ subject, body }),
+    });
   },
 };

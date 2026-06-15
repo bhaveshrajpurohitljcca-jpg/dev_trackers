@@ -17,6 +17,36 @@ from app import models, schemas, crud
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Run database migrations for SMTP settings dynamically
+from sqlalchemy import text
+db_mig = next(get_db())
+try:
+    dialect = db_mig.bind.dialect.name
+    if dialect == "sqlite":
+        columns_to_add = [
+            ("smtp_host", "VARCHAR", "'smtp.gmail.com'"),
+            ("smtp_port", "INTEGER", "587"),
+            ("smtp_user", "VARCHAR", "''"),
+            ("smtp_password", "VARCHAR", "''")
+        ]
+        for col_name, col_type, col_default in columns_to_add:
+            try:
+                db_mig.execute(text(f"ALTER TABLE settings ADD COLUMN {col_name} {col_type} DEFAULT {col_default}"))
+                db_mig.commit()
+            except Exception:
+                db_mig.rollback()
+    else:
+        db_mig.execute(text("ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp_host VARCHAR DEFAULT 'smtp.gmail.com'"))
+        db_mig.execute(text("ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587"))
+        db_mig.execute(text("ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp_user VARCHAR DEFAULT ''"))
+        db_mig.execute(text("ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp_password VARCHAR DEFAULT ''"))
+        db_mig.commit()
+except Exception as e:
+    print(f"Migration error: {e}")
+    db_mig.rollback()
+finally:
+    db_mig.close()
+
 # Run default seeding on startup
 db = next(get_db())
 try:
@@ -844,7 +874,15 @@ def trigger_daily_reminders(db: Session = Depends(get_db), current_admin: models
                 f"Best,\nTeam Progress Tracker"
             )
             # Send real email via SMTP
-            sent = send_email_smtp(user.email, "Reminder: Submit your work log today!", body)
+            sent = send_email_smtp(
+                user.email, 
+                "Reminder: Submit your work log today!", 
+                body,
+                smtp_host=settings_rec.smtp_host,
+                smtp_port=settings_rec.smtp_port,
+                smtp_user=settings_rec.smtp_user,
+                smtp_password=settings_rec.smtp_password
+            )
             email_log = models.EmailLog(
                 recipient_email=user.email,
                 subject="Reminder: Submit your work log today!",
@@ -894,7 +932,15 @@ def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: 
                 f"Best,\nTeam Progress Tracker"
             )
             # Send real email to the user
-            sent_user = send_email_smtp(user.email, f"Missing Daily Work Log - {today}", user_body)
+            sent_user = send_email_smtp(
+                user.email, 
+                f"Missing Daily Work Log - {today}", 
+                user_body,
+                smtp_host=settings_rec.smtp_host,
+                smtp_port=settings_rec.smtp_port,
+                smtp_user=settings_rec.smtp_user,
+                smtp_password=settings_rec.smtp_password
+            )
             user_email = models.EmailLog(
                 recipient_email=user.email,
                 subject=f"Missing Daily Work Log - {today}",
@@ -911,7 +957,15 @@ def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: 
                 f"Best,\nTeam Progress Tracker Notification System"
             )
             # Send real email to the admin
-            sent_admin = send_email_smtp(admin_email, f"Missing Log Alert: {user.username}", admin_body)
+            sent_admin = send_email_smtp(
+                admin_email, 
+                f"Missing Log Alert: {user.username}", 
+                admin_body,
+                smtp_host=settings_rec.smtp_host,
+                smtp_port=settings_rec.smtp_port,
+                smtp_user=settings_rec.smtp_user,
+                smtp_password=settings_rec.smtp_password
+            )
             admin_email_rec = models.EmailLog(
                 recipient_email=admin_email,
                 subject=f"Missing Log Alert: {user.username}",
@@ -936,3 +990,65 @@ def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: 
     db.commit()
     
     return {"detail": f"Deadline checks processed. {sent_count} warning emails logged. Missing streaks reset."}
+
+@app.post(f"{settings.API_V1_STR}/notifications/broadcast")
+def trigger_broadcast_email(
+    broadcast_data: schemas.BroadcastEmail,
+    db: Session = Depends(get_db), 
+    current_admin: models.User = Depends(get_current_admin)
+):
+    """Sends a manual broadcast email to all active users using the SMTP settings"""
+    settings_rec = crud.get_settings(db)
+    
+    # Get all active user accounts
+    users = db.query(models.User).filter(models.User.is_active == True).all()
+    
+    sent_count = 0
+    failed_count = 0
+    
+    for user in users:
+        # Avoid sending to empty emails
+        if not user.email:
+            continue
+            
+        sent = send_email_smtp(
+            user.email,
+            broadcast_data.subject,
+            broadcast_data.body,
+            smtp_host=settings_rec.smtp_host,
+            smtp_port=settings_rec.smtp_port,
+            smtp_user=settings_rec.smtp_user,
+            smtp_password=settings_rec.smtp_password
+        )
+        
+        email_log = models.EmailLog(
+            recipient_email=user.email,
+            subject=broadcast_data.subject,
+            body=broadcast_data.body,
+            status="Sent" if sent else "Failed"
+        )
+        db.add(email_log)
+        
+        if sent:
+            sent_count += 1
+        else:
+            failed_count += 1
+            
+    db.commit()
+    
+    crud.log_activity(
+        db, user_id=current_admin.id, user_name=current_admin.full_name,
+        activity_type="system_broadcast_email",
+        detail=f"Triggered manual broadcast email. Sent: {sent_count}, Failed: {failed_count}"
+    )
+    db.commit()
+    
+    if failed_count > 0 and sent_count == 0:
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to send any emails. Please check your SMTP credentials in Settings."
+        )
+        
+    return {
+        "detail": f"Broadcast processed. Sent {sent_count} emails successfully. Failed {failed_count} emails."
+    }
