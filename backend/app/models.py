@@ -18,7 +18,7 @@ class User(Base):
     created_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     @property
-    def team(self) -> Optional[str]:
+    def team(self):
         if self.primary_team and self.secondary_team:
             return f"{self.primary_team}, {self.secondary_team}"
         elif self.primary_team:
