@@ -3429,7 +3429,7 @@ export function AdminSettings() {
         {/* Right Column: Email logs */}
         <div className="glass-card section-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           <h3 className="section-title">
-            <Mail size={18} style={{ color: 'var(--color-secondary)' }} /> Outbox Mail Logs (Mock)
+            <Mail size={18} style={{ color: 'var(--color-secondary)' }} /> Outbox Mail Logs (SMTP)
           </h3>
           
           <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px', display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem', paddingRight: '0.25rem' }}>
