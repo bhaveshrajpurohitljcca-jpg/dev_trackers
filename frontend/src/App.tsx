@@ -685,6 +685,40 @@ export function UserDashboard() {
             </div>
           </div>
 
+          {/* Weekly Work Target Widget */}
+          <div className="glass-card section-card" style={{ borderLeft: `4px solid ${data?.weekly_work_hours >= 10 ? 'var(--color-success)' : 'var(--color-warning)'}` }}>
+            <h3 className="section-title" style={{ border: 'none', padding: '0', marginBottom: '0.75rem' }}>
+              Weekly Work Target
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                <span>Hours Logged (Coding & Learning):</span>
+                <strong>{data?.weekly_work_hours?.toFixed(1)} / 10.0 hrs</strong>
+              </div>
+              <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden', margin: '0.25rem 0' }}>
+                <div 
+                  style={{ 
+                    width: `${Math.min((data?.weekly_work_hours / 10) * 100, 100)}%`, 
+                    height: '100%', 
+                    backgroundColor: data?.weekly_work_hours >= 10 ? 'var(--color-success)' : 'var(--color-warning)',
+                    transition: 'width 0.3s ease'
+                  }}
+                />
+              </div>
+              {data?.weekly_work_hours >= 10 ? (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: 600 }}>
+                  <ShieldCheck size={16} />
+                  <span>Target Met! Excellent work this week.</span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  <AlertCircle size={16} style={{ color: 'var(--color-warning)' }} />
+                  <span>Need {(10 - data?.weekly_work_hours).toFixed(1)} more hours to reach the 10hr target.</span>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Current Progress bar */}
           <div className="glass-card section-card">
             <h3 className="section-title">Roadmap Progress</h3>
@@ -939,6 +973,56 @@ export function AdminDashboard() {
               ) : (
                 <div style={{ color: 'var(--color-success)', fontWeight: 600, fontSize: '0.9rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <CheckCircle2 size={16} /> All developers have logged today!
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Weekly Target Progress Widget */}
+          <div className="glass-card section-card">
+            <h3 className="section-title">
+              <Calendar size={18} /> Weekly Target Progress (Coding & Learning)
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
+              {data?.user_weekly_progress?.length > 0 ? (
+                data.user_weekly_progress.map((userProg: any, idx: number) => {
+                  const metTarget = userProg.weekly_work_hours >= 10;
+                  return (
+                    <div key={idx} style={{ padding: '0.75rem', backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{userProg.full_name}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            {userProg.weekly_work_hours.toFixed(1)} / 10 hrs
+                          </span>
+                          <span className={`badge ${metTarget ? 'badge-active' : 'badge-other'}`} style={{ 
+                            fontSize: '0.75rem', 
+                            padding: '0.15rem 0.4rem',
+                            backgroundColor: metTarget ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                            color: metTarget ? 'var(--color-success)' : 'var(--color-warning)',
+                            border: metTarget ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)',
+                            textTransform: 'none'
+                          }}>
+                            {metTarget ? 'Target Met' : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden' }}>
+                        <div 
+                          style={{ 
+                            width: `${Math.min((userProg.weekly_work_hours / 10) * 100, 100)}%`, 
+                            height: '100%', 
+                            backgroundColor: metTarget ? 'var(--color-success)' : 'var(--color-warning)',
+                            transition: 'width 0.3s ease'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="empty-state" style={{ padding: '1rem 0' }}>
+                  <p>No user progress data available.</p>
                 </div>
               )}
             </div>

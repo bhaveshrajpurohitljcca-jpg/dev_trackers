@@ -679,6 +679,13 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
     
     heatmap_data = {str(hl.date): round(hl.hours, 1) for hl in heatmap_logs}
 
+    # Coding + Learning hours this week
+    weekly_work_hours = db.query(func.sum(models.DailyLog.hours)).filter(
+        models.DailyLog.user_id == user_id,
+        models.DailyLog.date >= start_of_week,
+        models.DailyLog.category.in_(["Coding", "Learning"])
+    ).scalar() or 0.0
+
     return {
         "full_name": current_user.full_name,
         "current_streak": current_user.streak.current_streak if current_user.streak else 0,
@@ -696,7 +703,8 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
         "logged_today": logged_today,
         "deadline_time": deadline_time,
         "recent_activities": recent_activities,
-        "heatmap": heatmap_data
+        "heatmap": heatmap_data,
+        "weekly_work_hours": round(weekly_work_hours, 1)
     }
 
 # ==========================================
@@ -763,6 +771,28 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
     # Recent Activities
     recent_activities = db.query(models.ActivityLog).order_by(models.ActivityLog.created_at.desc()).limit(10).all()
 
+    # Calculate weekly coding & learning hours for each user
+    user_ids = [u.id for u in team_members]
+    weekly_logs_q = db.query(
+        models.DailyLog.user_id,
+        func.sum(models.DailyLog.hours)
+    ).filter(
+        models.DailyLog.user_id.in_(user_ids),
+        models.DailyLog.date >= start_of_week,
+        models.DailyLog.category.in_(["Coding", "Learning"])
+    ).group_by(models.DailyLog.user_id).all() if user_ids else []
+    
+    weekly_work_map = {user_id: hours or 0.0 for user_id, hours in weekly_logs_q}
+    
+    user_weekly_progress = []
+    for user in team_members:
+        user_weekly_progress.append({
+            "user_id": user.id,
+            "full_name": user.full_name,
+            "username": user.username,
+            "weekly_work_hours": round(weekly_work_map.get(user.id, 0.0), 1)
+        })
+
     return {
         "total_users": total_users,
         "active_users": active_users,
@@ -780,7 +810,8 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
         "most_active_count": most_active_count,
         "total_completed_topics": total_topics_completed,
         "total_projects": total_projects,
-        "recent_activities": recent_activities
+        "recent_activities": recent_activities,
+        "user_weekly_progress": user_weekly_progress
     }
 
 # ==========================================
