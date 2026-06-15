@@ -44,7 +44,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login
 # AUTHENTICATION DEPENDENCIES
 # ==========================================
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -65,7 +65,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise HTTPException(status_code=400, detail="Inactive user")
     return user
 
-async def get_current_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+def get_current_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -197,15 +197,11 @@ def admin_get_user_profile(user_id: int, db: Session = Depends(get_db), current_
             break
             
     # Assigned technologies
+    completed_topic_ids = {ct.topic_id for ct in user.completed_topics}
     assigned_techs = []
     for ut in user.assigned_technologies:
         tech = ut.technology
-        # calc completed topics count
-        topic_ids = [t.id for t in tech.topics]
-        completed_count = db.query(models.CompletedTopic).filter(
-            models.CompletedTopic.user_id == user_id,
-            models.CompletedTopic.topic_id.in_(topic_ids)
-        ).count() if topic_ids else 0
+        completed_count = sum(1 for t in tech.topics if t.id in completed_topic_ids)
         assigned_techs.append({
             "id": tech.id,
             "name": tech.name,
@@ -487,46 +483,70 @@ def user_delete_project(project_id: int, db: Session = Depends(get_db), current_
 def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     # Fetch active developers (role = user)
     users = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).all()
+    user_ids = [u.id for u in users]
     
     today = date.today()
     start_of_week = today - timedelta(days=today.weekday()) # Monday
     start_of_month = today.replace(day=1)
     
+    # Bulk query total hours
+    total_hours_q = db.query(
+        models.DailyLog.user_id, 
+        func.sum(models.DailyLog.hours)
+    ).filter(models.DailyLog.user_id.in_(user_ids)).group_by(models.DailyLog.user_id).all() if user_ids else []
+    total_hours_map = {user_id: hours or 0.0 for user_id, hours in total_hours_q}
+    
+    # Bulk query weekly hours
+    weekly_hours_q = db.query(
+        models.DailyLog.user_id, 
+        func.sum(models.DailyLog.hours)
+    ).filter(
+        models.DailyLog.user_id.in_(user_ids),
+        models.DailyLog.date >= start_of_week
+    ).group_by(models.DailyLog.user_id).all() if user_ids else []
+    weekly_hours_map = {user_id: hours or 0.0 for user_id, hours in weekly_hours_q}
+    
+    # Bulk query monthly hours
+    monthly_hours_q = db.query(
+        models.DailyLog.user_id, 
+        func.sum(models.DailyLog.hours)
+    ).filter(
+        models.DailyLog.user_id.in_(user_ids),
+        models.DailyLog.date >= start_of_month
+    ).group_by(models.DailyLog.user_id).all() if user_ids else []
+    monthly_hours_map = {user_id: hours or 0.0 for user_id, hours in monthly_hours_q}
+
+    # Bulk query streaks
+    streaks = db.query(models.Streak).filter(models.Streak.user_id.in_(user_ids)).all() if user_ids else []
+    streaks_map = {s.user_id: s for s in streaks}
+    
+    # Verify and reset streaks in memory, then commit once at the end
+    streak_changed = False
+    for user_id in user_ids:
+        s = streaks_map.get(user_id)
+        if s and s.last_log_date:
+            if s.last_log_date < today - timedelta(days=1):
+                s.current_streak = 0
+                streak_changed = True
+                
+    if streak_changed:
+        db.commit()
+        
     leaderboard_data = []
     for user in users:
-        crud.verify_and_reset_expired_streak(db, user.id)
-        # Sum total hours
-        total_hours = db.query(func.sum(models.DailyLog.hours)).filter(
-            models.DailyLog.user_id == user.id
-        ).scalar() or 0.0
-        
-        # Sum weekly hours
-        weekly_hours = db.query(func.sum(models.DailyLog.hours)).filter(
-            models.DailyLog.user_id == user.id,
-            models.DailyLog.date >= start_of_week
-        ).scalar() or 0.0
-        
-        # Sum monthly hours
-        monthly_hours = db.query(func.sum(models.DailyLog.hours)).filter(
-            models.DailyLog.user_id == user.id,
-            models.DailyLog.date >= start_of_month
-        ).scalar() or 0.0
-        
+        u_streak = streaks_map.get(user.id)
         leaderboard_data.append({
             "user_id": user.id,
             "full_name": user.full_name,
             "username": user.username,
             "team": user.team,
-            "total_hours": round(total_hours, 1),
-            "weekly_hours": round(weekly_hours, 1),
-            "monthly_hours": round(monthly_hours, 1),
-            "current_streak": user.streak.current_streak if user.streak else 0,
-            "longest_streak": user.streak.longest_streak if user.streak else 0
+            "total_hours": round(total_hours_map.get(user.id, 0.0), 1),
+            "weekly_hours": round(weekly_hours_map.get(user.id, 0.0), 1),
+            "monthly_hours": round(monthly_hours_map.get(user.id, 0.0), 1),
+            "current_streak": u_streak.current_streak if u_streak else 0,
+            "longest_streak": u_streak.longest_streak if u_streak else 0
         })
         
-    # Sort in memory
-    # We will return list sorted by total hours desc, weekly hours desc, monthly hours desc
-    # Frontend can sort by whatever they choose
     leaderboard_data.sort(key=lambda x: x["total_hours"], reverse=True)
     return leaderboard_data
 
