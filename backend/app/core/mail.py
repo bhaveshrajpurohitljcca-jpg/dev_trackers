@@ -50,14 +50,19 @@ def send_email_smtp(
         msg.attach(MIMEText(body, 'plain'))
         
         # Connect and send
+        import ssl
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+
         if port == 465:
-            logger.info(f"Connecting to SMTP SSL server {host}:{port} with 10s timeout (hostname: {original_host})...")
-            server = smtplib.SMTP_SSL(host, port, timeout=10, server_hostname=original_host)
+            logger.info(f"Connecting to SMTP SSL server {host}:{port} with 10s timeout...")
+            server = smtplib.SMTP_SSL(host, port, timeout=10, context=context)
         else:
             logger.info(f"Connecting to SMTP server {host}:{port} with 10s timeout...")
             server = smtplib.SMTP(host, port, timeout=10)
             try:
-                server.starttls(server_hostname=original_host)  # Upgrade connection to secure TLS
+                server.starttls(context=context)  # Upgrade connection to secure TLS
             except Exception as tls_err:
                 logger.warning(f"STARTTLS failed or not supported: {str(tls_err)}")
         
