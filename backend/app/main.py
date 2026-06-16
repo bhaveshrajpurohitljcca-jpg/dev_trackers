@@ -17,40 +17,57 @@ from app import models, schemas, crud
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-# Run database migrations for SMTP settings dynamically
-from sqlalchemy import text
-db_mig = next(get_db())
+# Run database migrations for SMTP settings dynamically only if columns are missing
+from sqlalchemy import inspect, text
+inspector = inspect(engine)
 try:
-    dialect = db_mig.bind.dialect.name
-    if dialect == "sqlite":
-        columns_to_add = [
-            ("smtp_host", "VARCHAR", "'smtp.gmail.com'"),
-            ("smtp_port", "INTEGER", "587"),
-            ("smtp_user", "VARCHAR", "''"),
-            ("smtp_password", "VARCHAR", "''")
-        ]
-        for col_name, col_type, col_default in columns_to_add:
+    if "settings" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("settings")]
+        missing_columns = [col for col in ["smtp_host", "smtp_port", "smtp_user", "smtp_password"] if col not in columns]
+        
+        if missing_columns:
+            db_mig = next(get_db())
             try:
-                db_mig.execute(text(f"ALTER TABLE settings ADD COLUMN {col_name} {col_type} DEFAULT {col_default}"))
-                db_mig.commit()
-            except Exception:
+                dialect = db_mig.bind.dialect.name
+                if dialect == "sqlite":
+                    columns_to_add = [
+                        ("smtp_host", "VARCHAR", "'smtp.gmail.com'"),
+                        ("smtp_port", "INTEGER", "587"),
+                        ("smtp_user", "VARCHAR", "''"),
+                        ("smtp_password", "VARCHAR", "''")
+                    ]
+                    for col_name, col_type, col_default in columns_to_add:
+                        if col_name in missing_columns:
+                            try:
+                                db_mig.execute(text(f"ALTER TABLE settings ADD COLUMN {col_name} {col_type} DEFAULT {col_default}"))
+                                db_mig.commit()
+                            except Exception:
+                                db_mig.rollback()
+                else:
+                    for col_name in missing_columns:
+                        col_type = "INTEGER" if col_name == "smtp_port" else "VARCHAR"
+                        col_default = "587" if col_name == "smtp_port" else "''"
+                        db_mig.execute(text(f"ALTER TABLE settings ADD COLUMN IF NOT EXISTS {col_name} {col_type} DEFAULT {col_default}"))
+                    db_mig.commit()
+            except Exception as e:
+                print(f"Migration error: {e}")
                 db_mig.rollback()
-    else:
-        db_mig.execute(text("ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp_host VARCHAR DEFAULT 'smtp.gmail.com'"))
-        db_mig.execute(text("ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587"))
-        db_mig.execute(text("ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp_user VARCHAR DEFAULT ''"))
-        db_mig.execute(text("ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp_password VARCHAR DEFAULT ''"))
-        db_mig.commit()
+            finally:
+                db_mig.close()
 except Exception as e:
-    print(f"Migration error: {e}")
-    db_mig.rollback()
-finally:
-    db_mig.close()
+    print(f"Inspector migration error: {e}")
 
-# Run default seeding on startup
+# Run default seeding on startup ONLY if database is empty (no users or no technologies)
 db = next(get_db())
 try:
-    crud.run_db_seeding(db)
+    has_techs = db.query(models.Technology).first() is not None
+    has_admin = db.query(models.User).filter(models.User.role == "admin").first() is not None
+    
+    if not has_techs or not has_admin:
+        print("First-time startup: Seeding default database records...")
+        crud.run_db_seeding(db)
+except Exception as e:
+    print(f"Error seeding database on startup: {e}")
 finally:
     db.close()
 
@@ -283,10 +300,6 @@ def admin_update_tech(tech_id: int, tech_update: schemas.TechCreate, db: Session
         
     updated = crud.update_technology(db, tech_id, tech_update)
     
-    # Recalculate technology achievements for all users
-    for user in db.query(models.User).filter(models.User.role == "user").all():
-        crud.check_technology_achievements(db, user.id)
-        
     return updated
 
 @app.delete(f"{settings.API_V1_STR}/admin/tech/{{tech_id}}")
@@ -304,7 +317,6 @@ def admin_assign_roadmap(user_id: int, data: Dict[str, List[int]], db: Session =
         raise HTTPException(status_code=404, detail="User not found")
         
     crud.assign_roadmap(db, user_id, tech_ids)
-    crud.check_technology_achievements(db, user_id)
     return {"detail": "Roadmap successfully updated"}
 
 # ==========================================
@@ -464,8 +476,6 @@ def uncomplete_topic_route(topic_id: int, db: Session = Depends(get_db), current
     success = crud.uncomplete_topic(db, current_user.id, topic_id)
     if not success:
         raise HTTPException(status_code=400, detail="Topic was not marked as completed")
-    # Re-evaluate achievements
-    crud.check_technology_achievements(db, current_user.id)
     return {"detail": "Topic marked as incomplete"}
 
 # ==========================================

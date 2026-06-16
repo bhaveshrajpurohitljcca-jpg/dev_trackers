@@ -39,7 +39,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { api } from './services/api';
-import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, Achievement, EmailLog } from './services/api';
+import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, EmailLog } from './services/api';
 
 // ============================================================================
 // CONTEXT / STATE PROVIDER
@@ -221,10 +221,6 @@ function Sidebar() {
             <Link to="/leaderboard" className={`sidebar-link ${location.pathname === '/leaderboard' ? 'active' : ''}`}>
               <Trophy size={18} />
               <span>Leaderboard</span>
-            </Link>
-            <Link to="/achievements" className={`sidebar-link ${location.pathname === '/achievements' ? 'active' : ''}`}>
-              <Award size={18} />
-              <span>Achievements</span>
             </Link>
           </>
         )}
@@ -2005,90 +2001,7 @@ export function Leaderboard() {
   );
 }
 
-// ============================================================================
-// PAGE: ACHIEVEMENTS
-// ============================================================================
 
-export function Achievements() {
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchAchievements = async () => {
-    try {
-      const data = await api.getAchievements();
-      setAchievements(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAchievements();
-  }, []);
-
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
-
-  return (
-    <Layout>
-      <div className="page-header">
-        <div className="page-title-section">
-          <h1 className="page-title">Achievements</h1>
-          <span className="page-subtitle">Milestones are unlocked automatically as you submit logs, maintain streaks, and complete roadmaps.</span>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-        {achievements.map((ach) => (
-          <div 
-            key={ach.id} 
-            className="glass-card" 
-            style={{ 
-              opacity: ach.is_unlocked ? 1 : 0.45,
-              borderColor: ach.is_unlocked ? 'var(--border-color-hover)' : 'var(--border-color)',
-              boxShadow: ach.is_unlocked ? '0 0 15px rgba(139, 92, 246, 0.1)' : 'none',
-              display: 'flex',
-              gap: '1rem',
-              alignItems: 'flex-start'
-            }}
-          >
-            <div 
-              style={{ 
-                width: '45px', 
-                height: '45px', 
-                borderRadius: '12px',
-                background: ach.is_unlocked ? 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%)' : 'rgba(255,255,255,0.03)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: ach.is_unlocked ? 'white' : 'var(--text-muted)',
-                boxShadow: ach.is_unlocked ? '0 4px 10px rgba(139, 92, 246, 0.3)' : 'none',
-                flexShrink: 0
-              }}
-            >
-              <Award size={22} />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: ach.is_unlocked ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-                {ach.name}
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                {ach.description}
-              </p>
-              {ach.is_unlocked && ach.unlocked_at && (
-                <span style={{ fontSize: '0.7rem', color: 'var(--color-success)', fontWeight: 600, marginTop: '0.25rem' }}>
-                  Unlocked on {new Date(ach.unlocked_at).toLocaleDateString()}
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </Layout>
-  );
-}
 
 // ============================================================================
 // PAGE: PROFILE
@@ -2254,24 +2167,6 @@ export function Profile() {
               </div>
             </div>
 
-            {/* Achievements badge grid */}
-            <div className="glass-card">
-              <h3 className="section-title">Unlocked Badges ({profile?.achievements?.length})</h3>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1rem' }}>
-                {profile?.achievements?.length > 0 ? (
-                  profile.achievements.map((ach: any) => (
-                    <div key={ach.id} className="badge badge-coding" style={{ textTransform: 'none', padding: '0.4rem 0.8rem', display: 'flex', gap: '0.4rem', alignItems: 'center', backgroundColor: 'rgba(139, 92, 246, 0.1)', color: 'var(--color-primary)', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
-                      <Award size={14} />
-                      <strong>{ach.name}</strong>
-                    </div>
-                  ))
-                ) : (
-                  <div className="empty-state" style={{ padding: '1rem 0', width: '100%' }}>
-                    <p>Submit logs and unlock achievements!</p>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -2713,17 +2608,6 @@ export function AdminUsers() {
                   </div>
                 </div>
 
-                {/* Achievements */}
-                <div>
-                  <h4 style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Unlocked Achievements</h4>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {selectedProfile.achievements.map((ach: any) => (
-                      <span key={ach.id} className="badge badge-coding" style={{ textTransform: 'none' }}>
-                        {ach.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
               </div>
             ) : (
               <div style={{ padding: '3rem', textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }}></div></div>
@@ -3637,11 +3521,6 @@ export default function App() {
             </ProtectedRoute>
           } />
 
-          <Route path="/achievements" element={
-            <ProtectedRoute>
-              <Achievements />
-            </ProtectedRoute>
-          } />
 
           <Route path="/profile" element={
             <ProtectedRoute>

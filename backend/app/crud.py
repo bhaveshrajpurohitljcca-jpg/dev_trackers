@@ -201,9 +201,6 @@ def complete_topic(db: Session, user_id: int, topic_id: int):
     log_activity(db, user_id=user_id, user_name=user.full_name if user else "User", 
                  activity_type="complete_topic", detail=f"Completed topic: {tech_name} - {topic_name}")
                  
-    # Check achievements
-    check_and_unlock_achievements(db, user_id)
-    
     db.commit()
     return db_completed
 
@@ -277,9 +274,6 @@ def create_daily_log(db: Session, user_id: int, log_data: schemas.DailyLogCreate
         activity_type="log_hours",
         detail=f"Logged {log_data.hours} hours of {log_data.category} on {log_data.date}"
     )
-    
-    # Check achievements
-    check_and_unlock_achievements(db, user_id)
     
     db.commit()
     return db_log
@@ -450,243 +444,21 @@ def get_achievements(db: Session):
     return db.query(models.Achievement).all()
 
 def seed_default_achievements(db: Session):
-    default_achievements = [
-        {"name": "First Log", "description": "Log your first entry", "criteria_type": "first_log", "criteria_value": "1"},
-        {"name": "10 Hours", "description": "Log a total of 10 hours", "criteria_type": "total_hours", "criteria_value": "10"},
-        {"name": "50 Hours", "description": "Log a total of 50 hours", "criteria_type": "total_hours", "criteria_value": "50"},
-        {"name": "100 Hours", "description": "Log a total of 100 hours", "criteria_type": "total_hours", "criteria_value": "100"},
-        {"name": "500 Hours", "description": "Log a total of 500 hours", "criteria_type": "total_hours", "criteria_value": "500"},
-        {"name": "7 Day Streak", "description": "Maintain a 7-day work logging streak", "criteria_type": "streak", "criteria_value": "7"},
-        {"name": "30 Day Streak", "description": "Maintain a 30-day work logging streak", "criteria_type": "streak", "criteria_value": "30"},
-    ]
-    
-    for ach in default_achievements:
-        db_ach = db.query(models.Achievement).filter(models.Achievement.name == ach["name"]).first()
-        if not db_ach:
-            db_ach = models.Achievement(**ach)
-            db.add(db_ach)
-    db.commit()
+    pass
 
 def check_and_unlock_achievements(db: Session, user_id: int):
-    user = get_user(db, user_id)
-    if not user:
-        return
-        
-    # Get all locked achievements
-    unlocked_ids = [ua.achievement_id for ua in user.achievements]
-    locked_achievements = db.query(models.Achievement).filter(~models.Achievement.id.in_(unlocked_ids)).all() if unlocked_ids else db.query(models.Achievement).all()
-    
-    # Calculate stats
-    total_hours = db.query(func.sum(models.DailyLog.hours)).filter(models.DailyLog.user_id == user_id).scalar() or 0.0
-    streak_days = user.streak.longest_streak if user.streak else 0
-    total_logs = db.query(func.count(models.DailyLog.id)).filter(models.DailyLog.user_id == user_id).scalar() or 0
-    
-    # Fetch all assigned technologies
-    assigned_techs = get_user_assigned_technologies(db, user_id)
-    
-    for ach in locked_achievements:
-        unlocked = False
-        
-        if ach.criteria_type == "first_log" and total_logs >= 1:
-            unlocked = True
-        elif ach.criteria_type == "total_hours" and total_hours >= float(ach.criteria_value):
-            unlocked = True
-        elif ach.criteria_type == "streak" and streak_days >= int(ach.criteria_value):
-            unlocked = True
-        elif ach.criteria_type == "completed_tech":
-            # Find the technology matching the value (case-insensitive name)
-            tech = next((t for t in assigned_techs if t.name.lower() == ach.criteria_value.lower()), None)
-            if tech and len(tech.topics) > 0:
-                # Get completed topics for this tech
-                topic_ids = [t.id for t in tech.topics]
-                completions = db.query(models.CompletedTopic).filter(
-                    models.CompletedTopic.user_id == user_id,
-                    models.CompletedTopic.topic_id.in_(topic_ids)
-                ).count()
-                if completions == len(tech.topics):
-                    unlocked = True
-                    
-        if unlocked:
-            user_ach = models.UserAchievement(user_id=user_id, achievement_id=ach.id)
-            db.add(user_ach)
-            log_activity(
-                db, user_id=user_id, user_name=user.full_name,
-                activity_type="achievement_unlocked",
-                detail=f"Unlocked Achievement: {ach.name} - {ach.description}"
-            )
-            # Add dynamic technology achievement dynamically if not pre-seeded
-            # and it is completed. We can do that by creating dynamically or just check seeded.
+    pass
 
 # Create achievements dynamically for assigned technologies if completed
 def check_technology_achievements(db: Session, user_id: int):
-    # This checks if the user has completed any assigned technology and creates a dynamic achievement
-    user = get_user(db, user_id)
-    if not user:
-        return
-    assigned_techs = get_user_assigned_technologies(db, user_id)
-    for tech in assigned_techs:
-        # Check if achievement exists for tech
-        ach_name = f"{tech.name} Completed"
-        db_ach = db.query(models.Achievement).filter(models.Achievement.name == ach_name).first()
-        if not db_ach:
-            db_ach = models.Achievement(
-                name=ach_name,
-                description=f"Complete all topics in {tech.name}",
-                criteria_type="completed_tech",
-                criteria_value=tech.name
-            )
-            db.add(db_ach)
-            db.commit()
-            db.refresh(db_ach)
-            
-    # Run full check
-    check_and_unlock_achievements(db, user_id)
+    pass
 
 # ==========================================
 # SYSTEM DATA SEEDING
 # ==========================================
 
 def seed_default_technologies(db: Session):
-    techs_data = [
-        {
-            "name": "Python",
-            "description": "Programming Language (Backend Stack) - 4-6 Weeks",
-            "topics": [
-                "Basics: Variables, Data Types, Operators, If-Else, Loops, Functions",
-                "Intermediate: Lists, Tuples, Dictionaries, Sets",
-                "Important: OOP (Classes & Objects), Inheritance, Exception Handling, File Handling",
-                "Advanced: Modules, Packages, Virtual Environment, Async & Await, Type Hints"
-            ]
-        },
-        {
-            "name": "SQL",
-            "description": "Structured Query Language (Database Stack) - 2-3 Weeks",
-            "topics": [
-                "Must Know: CREATE, INSERT, SELECT, UPDATE, DELETE",
-                "Then: WHERE, ORDER BY, GROUP BY, HAVING, LIMIT",
-                "Most Important: INNER JOIN, LEFT JOIN, RIGHT JOIN",
-                "Then: Aggregate Functions, Foreign Keys, Constraints, Transactions"
-            ]
-        },
-        {
-            "name": "PostgreSQL",
-            "description": "Relational Database Management System (Database Stack) - 1 Week",
-            "topics": [
-                "Learn: Installation, Databases, Tables, Relationships",
-                "Then: Primary Key, Foreign Key, Indexes, Constraints",
-                "Then: Backup, Restore"
-            ]
-        },
-        {
-            "name": "FastAPI",
-            "description": "Modern Web Framework for building APIs (Backend Stack) - 2-3 Weeks",
-            "topics": [
-                "Learn: Routes (GET, POST, PUT, DELETE)",
-                "Then: Request, Response",
-                "Then: CRUD APIs",
-                "Then: Pydantic Models",
-                "Then: File Upload",
-                "Then: Dependency Injection",
-                "Then: Authentication",
-                "Then: WebSockets"
-            ]
-        },
-        {
-            "name": "HTML",
-            "description": "HyperText Markup Language (Frontend Stack) - 3-5 Days",
-            "topics": [
-                "Learn: Head, Body, Div, Span",
-                "Then: Forms, Input, Button, Table, Image, Video, Semantic Tags"
-            ]
-        },
-        {
-            "name": "CSS",
-            "description": "Cascading Style Sheets (Frontend Stack) - 1-2 Weeks",
-            "topics": [
-                "Learn: Selectors, Margin, Padding, Border, Position",
-                "Then: Flexbox, Grid",
-                "Then: Responsive Design"
-            ]
-        },
-        {
-            "name": "JavaScript",
-            "description": "Programming Language for Web Development (Frontend Stack) - 3-4 Weeks",
-            "topics": [
-                "Basics: Variables, Functions, Arrays, Objects",
-                "Then: Loops, DOM",
-                "Then: ES6, Arrow Functions, Destructuring, Spread Operator",
-                "Then: Async Await, Promises, Fetch API"
-            ]
-        },
-        {
-            "name": "React",
-            "description": "JavaScript Library for Building UI (Frontend Stack) - 4-5 Weeks",
-            "topics": [
-                "Learn: Components, JSX, Props, State",
-                "Then: Hooks (useState, useEffect)",
-                "Then: Forms, Lists, Events",
-                "Then: React Router",
-                "Then: API Calls",
-                "Then: Context API"
-            ]
-        },
-        {
-            "name": "TypeScript",
-            "description": "Typed Superset of JavaScript (Frontend Stack) - 1-2 Weeks",
-            "topics": [
-                "Learn: Types, Interfaces, Enums, Generics, Type Aliases"
-            ]
-        }
-    ]
-    
-    # 1. Clean obsolete technologies and their achievements
-    new_tech_names = [t["name"] for t in techs_data]
-    obsolete_techs = db.query(models.Technology).filter(~models.Technology.name.in_(new_tech_names)).all()
-    for ot in obsolete_techs:
-        db.delete(ot)
-    db.commit()
-    
-    obsolete_achievements = db.query(models.Achievement).filter(
-        models.Achievement.criteria_type == "completed_tech",
-        ~models.Achievement.criteria_value.in_(new_tech_names)
-    ).all()
-    for oa in obsolete_achievements:
-        db.delete(oa)
-    db.commit()
-    
-    # 2. Add or update technologies and sync their topics
-    for t_data in techs_data:
-        db_tech = db.query(models.Technology).filter(models.Technology.name == t_data["name"]).first()
-        if not db_tech:
-            db_tech = models.Technology(name=t_data["name"], description=t_data["description"])
-            db.add(db_tech)
-            db.commit()
-            db.refresh(db_tech)
-        else:
-            if db_tech.description != t_data["description"]:
-                db_tech.description = t_data["description"]
-                db.commit()
-                
-        # Sync topics for this technology
-        existing_topics = db.query(models.Topic).filter(models.Topic.technology_id == db_tech.id).all()
-        existing_names_map = {t.name: t for t in existing_topics}
-        
-        # Delete topics that are not in the new syllabus
-        for ext_t in existing_topics:
-            if ext_t.name not in t_data["topics"]:
-                db.delete(ext_t)
-        db.commit()
-        
-        # Add new or update existing topic sequences
-        for idx, name in enumerate(t_data["topics"]):
-            if name in existing_names_map:
-                existing_names_map[name].sequence_order = idx
-            else:
-                db_topic = models.Topic(technology_id=db_tech.id, name=name, sequence_order=idx)
-                db.add(db_topic)
-        db.commit()
-        
-    db.commit()
+    pass
 
 def seed_admin_user(db: Session):
     db_admin = db.query(models.User).filter(models.User.username == "admin").first()
@@ -708,6 +480,3 @@ def run_db_seeding(db: Session):
     seed_default_achievements(db)
     seed_default_technologies(db)
     seed_admin_user(db)
-    # Generate technology achievements
-    for u in db.query(models.User).all():
-        check_technology_achievements(db, u.id)
