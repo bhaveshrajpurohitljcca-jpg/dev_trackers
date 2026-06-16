@@ -359,6 +359,10 @@ export const api = {
     return request<any>('/admin/dashboard');
   },
 
+  async adminGetPerformance(): Promise<any> {
+    return request<any>('/admin/performance');
+  },
+
   // Email Reminders Triggers
   async triggerReminders(): Promise<{ detail: string }> {
     return request<{ detail: string }>('/notifications/reminder', { method: 'POST' });

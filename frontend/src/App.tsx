@@ -191,6 +191,10 @@ function Sidebar() {
               <Users size={18} />
               <span>Users</span>
             </Link>
+            <Link to="/admin/performance" className={`sidebar-link ${location.pathname === '/admin/performance' ? 'active' : ''}`}>
+              <TrendingUp size={18} />
+              <span>Performance</span>
+            </Link>
             <Link to="/admin/roadmaps" className={`sidebar-link ${location.pathname === '/admin/roadmaps' ? 'active' : ''}`}>
               <BookOpen size={18} />
               <span>Roadmaps</span>
@@ -3475,6 +3479,431 @@ export function AdminSettings() {
 }
 
 // ============================================================================
+// PAGE: ADMIN USER PERFORMANCE
+// ============================================================================
+
+export function AdminPerformance() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [visibleUsers, setVisibleUsers] = useState<Record<number, boolean>>({});
+  const { showError, ToastComponent } = useToast();
+
+  const fetchPerformance = async () => {
+    try {
+      const res = await api.adminGetPerformance();
+      setData(res);
+      // Initialize all users as visible in chart
+      if (res && res.users_performance) {
+        const visibility: Record<number, boolean> = {};
+        res.users_performance.forEach((user: any) => {
+          visibility[user.user_id] = true;
+        });
+        setVisibleUsers(visibility);
+      }
+    } catch (err: any) {
+      showError(err.message || 'Failed to fetch user performance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPerformance();
+  }, []);
+
+  const toggleUserVisibility = (userId: number) => {
+    setVisibleUsers(prev => ({
+      ...prev,
+      [userId]: !prev[userId]
+    }));
+  };
+
+  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
+  if (!data) return <Layout><div className="empty-state"><p>No performance data available.</p></div></Layout>;
+
+  // Filtered users for table
+  const filteredUsers = data.users_performance.filter((user: any) =>
+    user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.username.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // SVG Chart Configuration
+  const days = data.week_days; // ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+  const dates = data.week_dates; // dates strings
+  const chartWidth = 700;
+  const chartHeight = 300;
+  const paddingLeft = 40;
+  const paddingRight = 20;
+  const paddingTop = 20;
+  const paddingBottom = 40;
+
+  const graphWidth = chartWidth - paddingLeft - paddingRight;
+  const graphHeight = chartHeight - paddingTop - paddingBottom;
+
+  // Find max hours logged by any visible user to scale Y axis
+  let maxHours = 8; // default minimum Y-max
+  data.users_performance.forEach((user: any) => {
+    if (visibleUsers[user.user_id]) {
+      const userMax = Math.max(...user.weekly_hours, 0);
+      if (userMax > maxHours) {
+        maxHours = userMax;
+      }
+    }
+  });
+  // Round up to nearest even number
+  maxHours = Math.ceil(maxHours / 2) * 2;
+
+  // Generate Y axis tick labels
+  const yTicks = [];
+  const tickCount = 5;
+  for (let i = 0; i < tickCount; i++) {
+    yTicks.push((maxHours / (tickCount - 1)) * i);
+  }
+
+  // Predefined line colors for users
+  const colors = [
+    '#8B5CF6', // violet
+    '#3B82F6', // blue
+    '#10B981', // green
+    '#F59E0B', // amber
+    '#EF4444', // red
+    '#EC4899', // pink
+    '#06B6D4', // cyan
+    '#84CC16', // lime
+    '#F97316', // orange
+    '#A855F7', // purple
+  ];
+
+  const getUserColor = (index: number) => {
+    return colors[index % colors.length];
+  };
+
+  return (
+    <Layout>
+      {ToastComponent}
+      <div className="page-header">
+        <div className="page-title-section">
+          <h1 className="page-title">User Performance Panel</h1>
+          <span className="page-subtitle">Track daily hourly logging, see today's status, and monitor team performance.</span>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+        
+        {/* CHART SECTION */}
+        <div className="glass-card" style={{ padding: '1.5rem' }}>
+          <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+            <TrendingUp size={18} /> Current Week Logging (Daily Hours)
+          </h3>
+          
+          <div style={{ position: 'relative', width: '100%', overflowX: 'auto' }}>
+            <svg 
+              viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
+              width="100%" 
+              height={chartHeight}
+              style={{ minWidth: '600px', overflow: 'visible' }}
+            >
+              {/* Grid Lines & Y-ticks */}
+              {yTicks.map((tick: number) => {
+                const y = paddingTop + graphHeight - (tick / maxHours) * graphHeight;
+                return (
+                  <g key={tick}>
+                    <line 
+                      x1={paddingLeft} 
+                      y1={y} 
+                      x2={chartWidth - paddingRight} 
+                      y2={y} 
+                      stroke="rgba(255,255,255,0.05)" 
+                      strokeWidth="1"
+                    />
+                    <text 
+                      x={paddingLeft - 10} 
+                      y={y + 4} 
+                      fill="var(--text-muted)" 
+                      fontSize="10" 
+                      textAnchor="end"
+                    >
+                      {tick.toFixed(0)}h
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* X Axis ticks */}
+              {days.map((day: string, i: number) => {
+                const x = paddingLeft + (i / 6) * graphWidth;
+                return (
+                  <g key={day}>
+                    <line 
+                      x1={x} 
+                      y1={paddingTop} 
+                      x2={x} 
+                      y2={paddingTop + graphHeight} 
+                      stroke="rgba(255,255,255,0.05)"
+                      strokeWidth="1"
+                    />
+                    <text 
+                      x={x} 
+                      y={paddingTop + graphHeight + 18} 
+                      fill="var(--text-secondary)" 
+                      fontSize="11" 
+                      fontWeight="600"
+                      textAnchor="middle"
+                    >
+                      {day}
+                    </text>
+                    <text 
+                      x={x} 
+                      y={paddingTop + graphHeight + 32} 
+                      fill="var(--text-muted)" 
+                      fontSize="9" 
+                      textAnchor="middle"
+                    >
+                      {dates[i] ? dates[i].substring(5) : ''}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* User Line Paths */}
+              {data.users_performance.map((user: any, userIdx: number) => {
+                if (!visibleUsers[user.user_id]) return null;
+                const color = getUserColor(userIdx);
+                
+                // Construct path coordinates
+                const points = user.weekly_hours.map((val: number, i: number) => {
+                  const x = paddingLeft + (i / 6) * graphWidth;
+                  const y = paddingTop + graphHeight - (val / maxHours) * graphHeight;
+                  return `${x},${y}`;
+                });
+                const dPath = `M ${points.join(' L ')}`;
+
+                return (
+                  <g key={user.user_id}>
+                    {/* Line */}
+                    <path 
+                      d={dPath} 
+                      fill="none" 
+                      stroke={color} 
+                      strokeWidth="2.5" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                      style={{ 
+                        transition: 'all 0.3s ease',
+                        filter: `drop-shadow(0px 2px 4px rgba(0,0,0,0.3))`
+                      }}
+                    />
+                    {/* Dots at each point */}
+                    {user.weekly_hours.map((val: number, i: number) => {
+                      const x = paddingLeft + (i / 6) * graphWidth;
+                      const y = paddingTop + graphHeight - (val / maxHours) * graphHeight;
+                      return (
+                        <circle 
+                          key={i} 
+                          cx={x} 
+                          cy={y} 
+                          r="4" 
+                          fill="var(--background-card)" 
+                          stroke={color} 
+                          strokeWidth="2.5" 
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <title>{`${user.full_name}: ${val} hours (${days[i]} ${dates[i]})`}</title>
+                        </circle>
+                      );
+                    })}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* LEGEND / USER TOGGLES */}
+          <div style={{ 
+            marginTop: '1.5rem', 
+            paddingTop: '1rem', 
+            borderTop: '1px solid var(--border-color)', 
+            display: 'flex', 
+            flexWrap: 'wrap', 
+            gap: '0.75rem', 
+            justifyContent: 'center' 
+          }}>
+            {data.users_performance.map((user: any, userIdx: number) => {
+              const color = getUserColor(userIdx);
+              const isVisible = visibleUsers[user.user_id];
+              return (
+                <button 
+                  key={user.user_id}
+                  onClick={() => toggleUserVisibility(user.user_id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.35rem 0.75rem',
+                    borderRadius: '8px',
+                    backgroundColor: isVisible ? 'rgba(255,255,255,0.05)' : 'transparent',
+                    border: `1px solid ${isVisible ? color : 'var(--border-color)'}`,
+                    color: isVisible ? 'var(--text-primary)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <span style={{ 
+                    display: 'inline-block', 
+                    width: '10px', 
+                    height: '10px', 
+                    borderRadius: '50%', 
+                    backgroundColor: color,
+                    border: '1px solid rgba(255,255,255,0.2)'
+                  }} />
+                  {user.full_name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* DETAILS TABLE SECTION */}
+        <div className="glass-card" style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <h3 className="section-title" style={{ margin: 0 }}>Team Performance & Logs</h3>
+            <div style={{ position: 'relative', minWidth: '240px' }}>
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="Search team member..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ height: '38px', paddingRight: '2rem' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ minWidth: '800px', width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>User Details</th>
+                  <th style={{ textAlign: 'center', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>Today's Status</th>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 1rem', color: 'var(--text-secondary)', width: '35%' }}>Today's Work Log</th>
+                  <th style={{ textAlign: 'center', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>Avg Hours/Entry</th>
+                  <th style={{ textAlign: 'center', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>Total Logs</th>
+                  <th style={{ textAlign: 'right', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>Total Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.length > 0 ? (
+                  filteredUsers.map((user: any, idx: number) => {
+                    const color = getUserColor(data.users_performance.findIndex((u: any) => u.user_id === user.user_id));
+                    return (
+                      <tr 
+                        key={user.user_id} 
+                        style={{ 
+                          borderBottom: '1px solid rgba(255,255,255,0.03)',
+                          backgroundColor: idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent'
+                        }}
+                      >
+                        {/* User Details */}
+                        <td style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div style={{ 
+                            width: '32px', 
+                            height: '32px', 
+                            borderRadius: '8px', 
+                            backgroundColor: color, 
+                            color: 'white', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '0.85rem'
+                          }}>
+                            {user.full_name.split(' ').map((n: string) => n[0]).join('').substring(0,2).toUpperCase()}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.full_name}</span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{user.username}</span>
+                          </div>
+                        </td>
+                        
+                        {/* Status Today */}
+                        <td style={{ padding: '1rem', textAlign: 'center' }}>
+                          <span 
+                            style={{ 
+                              display: 'inline-block',
+                              padding: '0.25rem 0.6rem',
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              backgroundColor: user.has_logged_today ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                              color: user.has_logged_today ? 'var(--color-success)' : 'var(--color-danger)',
+                              border: user.has_logged_today ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)'
+                            }}
+                          >
+                            {user.has_logged_today ? 'Logged' : 'Not Logged'}
+                          </span>
+                        </td>
+
+                        {/* Today's Log Details */}
+                        <td style={{ padding: '1rem', verticalAlign: 'middle' }}>
+                          {user.has_logged_today && user.today_log ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                <span className={`badge badge-${user.today_log.category.toLowerCase().replace(' ', '-')}`} style={{ fontSize: '0.7rem' }}>
+                                  {user.today_log.category}
+                                </span>
+                                <strong style={{ color: 'var(--text-primary)', fontSize: '0.8rem' }}>
+                                  {user.today_log.hours.toFixed(1)} hrs
+                                </strong>
+                              </div>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
+                                {user.today_log.description}
+                              </span>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                              No log submitted today
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Average Hours */}
+                        <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 600, color: 'var(--color-secondary)' }}>
+                          {user.average_hours_per_day.toFixed(1)} hrs
+                        </td>
+
+                        {/* Total Log Entries Count */}
+                        <td style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                          {user.total_logs_count} entries
+                        </td>
+
+                        {/* Total Hours */}
+                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {user.total_hours.toFixed(1)} hrs
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      No team members found matching your search.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </Layout>
+  );
+}
+
+// ==============================================================================================================
 // MAIN ROOT APP COMPONENT
 // ============================================================================
 
@@ -3538,6 +3967,12 @@ export default function App() {
           <Route path="/admin/users" element={
             <ProtectedRoute adminOnly={true}>
               <AdminUsers />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin/performance" element={
+            <ProtectedRoute adminOnly={true}>
+              <AdminPerformance />
             </ProtectedRoute>
           } />
 

@@ -888,6 +888,93 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
         "user_weekly_progress": user_weekly_progress
     }
 
+@app.get(f"{settings.API_V1_STR}/admin/performance")
+def get_admin_user_performance(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
+    today = date.today()
+    start_of_week = today - timedelta(days=today.weekday()) # Monday
+    week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
+    week_days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    
+    # Fetch all active team members (role = user, is_active = True)
+    team_members = db.query(models.User).filter(
+        models.User.role == "user", 
+        models.User.is_active == True
+    ).all()
+    
+    user_ids = [u.id for u in team_members]
+    
+    # Query today's logs
+    today_logs = db.query(models.DailyLog).filter(
+        models.DailyLog.date == today,
+        models.DailyLog.user_id.in_(user_ids)
+    ).all() if user_ids else []
+    today_logs_map = {log.user_id: log for log in today_logs}
+    
+    # Query weekly logs
+    weekly_logs = db.query(models.DailyLog).filter(
+        models.DailyLog.user_id.in_(user_ids),
+        models.DailyLog.date >= start_of_week,
+        models.DailyLog.date <= start_of_week + timedelta(days=6)
+    ).all() if user_ids else []
+    
+    # Map logs to user_id -> date -> hours
+    user_weekly_hours = {u.id: {d: 0.0 for d in week_dates} for u in team_members}
+    for log in weekly_logs:
+        if log.user_id in user_weekly_hours and log.date in user_weekly_hours[log.user_id]:
+            user_weekly_hours[log.user_id][log.date] = log.hours
+            
+    # Query all-time stats: total hours, total logs count
+    stats_query = db.query(
+        models.DailyLog.user_id,
+        func.sum(models.DailyLog.hours).label("total_hours"),
+        func.count(models.DailyLog.id).label("total_logs")
+    ).filter(models.DailyLog.user_id.in_(user_ids)).group_by(models.DailyLog.user_id).all() if user_ids else []
+    
+    stats_map = {
+        user_id: {"total_hours": total_hours or 0.0, "total_logs": total_logs or 0} 
+        for user_id, total_hours, total_logs in stats_query
+    }
+    
+    users_performance = []
+    for user in team_members:
+        user_stats = stats_map.get(user.id, {"total_hours": 0.0, "total_logs": 0})
+        total_hours = user_stats["total_hours"]
+        total_logs = user_stats["total_logs"]
+        avg_hours = round(total_hours / total_logs, 1) if total_logs > 0 else 0.0
+        
+        # Today's log details
+        today_log = today_logs_map.get(user.id)
+        today_log_details = None
+        if today_log:
+            today_log_details = {
+                "hours": today_log.hours,
+                "category": today_log.category,
+                "description": today_log.description
+            }
+            
+        # Compile weekly daily hours array (Mon - Sun)
+        weekly_daily_hours = [
+            round(user_weekly_hours[user.id][d], 1) for d in week_dates
+        ]
+        
+        users_performance.append({
+            "user_id": user.id,
+            "full_name": user.full_name,
+            "username": user.username,
+            "has_logged_today": today_log is not None,
+            "today_log": today_log_details,
+            "average_hours_per_day": avg_hours,
+            "total_hours": round(total_hours, 1),
+            "total_logs_count": total_logs,
+            "weekly_hours": weekly_daily_hours
+        })
+        
+    return {
+        "users_performance": users_performance,
+        "week_days": week_days,
+        "week_dates": [d.strftime("%Y-%m-%d") for d in week_dates]
+    }
+
 # ==========================================
 # NOTIFICATIONS & DEADLINE CHECKS
 # ==========================================
