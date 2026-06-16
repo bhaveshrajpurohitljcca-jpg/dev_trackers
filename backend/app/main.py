@@ -957,6 +957,16 @@ def get_admin_user_performance(db: Session = Depends(get_db), current_admin: mod
             round(user_weekly_hours[user.id][d], 1) for d in week_dates
         ]
         
+        # Calculate Technology Progress
+        completed_topics_ids = {ct.topic_id for ct in user.completed_topics}
+        completed_techs_list = []
+        for ut in user.assigned_technologies:
+            tech = ut.technology
+            if tech.topics:
+                tech_topic_ids = {t.id for t in tech.topics}
+                if tech_topic_ids.issubset(completed_topics_ids):
+                    completed_techs_list.append(tech.name)
+
         users_performance.append({
             "user_id": user.id,
             "full_name": user.full_name,
@@ -966,7 +976,10 @@ def get_admin_user_performance(db: Session = Depends(get_db), current_admin: mod
             "average_hours_per_day": avg_hours,
             "total_hours": round(total_hours, 1),
             "total_logs_count": total_logs,
-            "weekly_hours": weekly_daily_hours
+            "weekly_hours": weekly_daily_hours,
+            "total_assigned_techs": len(user.assigned_technologies),
+            "completed_techs_count": len(completed_techs_list),
+            "completed_techs_list": completed_techs_list
         })
         
     return {
