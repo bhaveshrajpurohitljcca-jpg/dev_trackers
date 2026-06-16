@@ -480,3 +480,45 @@ def run_db_seeding(db: Session):
     seed_default_achievements(db)
     seed_default_technologies(db)
     seed_admin_user(db)
+
+
+# ==========================================
+# MESSAGE OPERATIONS
+# ==========================================
+
+def create_message(db: Session, sender_id: int, message: schemas.MessageCreate):
+    db_msg = models.Message(
+        sender_id=sender_id,
+        recipient_id=message.recipient_id,
+        content=message.content
+    )
+    db.add(db_msg)
+    db.commit()
+    db.refresh(db_msg)
+    return db_msg
+
+def get_received_messages(db: Session, user_id: int, limit: int = 5, skip: int = 0):
+    return db.query(models.Message)\
+        .filter(models.Message.recipient_id == user_id)\
+        .order_by(models.Message.created_at.desc())\
+        .offset(skip)\
+        .limit(limit)\
+        .all()
+
+def get_sent_messages(db: Session, admin_id: int, limit: int = 5, skip: int = 0):
+    return db.query(models.Message)\
+        .filter(models.Message.sender_id == admin_id)\
+        .order_by(models.Message.created_at.desc())\
+        .offset(skip)\
+        .limit(limit)\
+        .all()
+
+def delete_message(db: Session, message_id: int, user_id: int):
+    db_msg = db.query(models.Message).filter(models.Message.id == message_id).first()
+    if not db_msg:
+        return False
+    if db_msg.sender_id == user_id or db_msg.recipient_id == user_id:
+        db.delete(db_msg)
+        db.commit()
+        return True
+    return False

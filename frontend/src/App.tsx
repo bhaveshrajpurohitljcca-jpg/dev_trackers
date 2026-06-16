@@ -36,10 +36,12 @@ import {
   TrendingUp,
   ShieldCheck,
   CalendarDays,
-  Sliders
+  Sliders,
+  MessageSquare,
+  Send
 } from 'lucide-react';
 import { api } from './services/api';
-import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, EmailLog } from './services/api';
+import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, EmailLog, Message } from './services/api';
 
 // ============================================================================
 // CONTEXT / STATE PROVIDER
@@ -195,13 +197,17 @@ function Sidebar() {
               <TrendingUp size={18} />
               <span>Performance</span>
             </Link>
-            <Link to="/admin/roadmaps" className={`sidebar-link ${location.pathname === '/admin/roadmaps' ? 'active' : ''}`}>
+             <Link to="/admin/roadmaps" className={`sidebar-link ${location.pathname === '/admin/roadmaps' ? 'active' : ''}`}>
               <BookOpen size={18} />
               <span>Roadmaps</span>
             </Link>
             <Link to="/admin/settings" className={`sidebar-link ${location.pathname === '/admin/settings' ? 'active' : ''}`}>
               <SettingsIcon size={18} />
               <span>Settings</span>
+            </Link>
+            <Link to="/admin/messages" className={`sidebar-link ${location.pathname === '/admin/messages' ? 'active' : ''}`}>
+              <MessageSquare size={18} />
+              <span>Messages</span>
             </Link>
           </>
         ) : (
@@ -225,6 +231,10 @@ function Sidebar() {
             <Link to="/leaderboard" className={`sidebar-link ${location.pathname === '/leaderboard' ? 'active' : ''}`}>
               <Trophy size={18} />
               <span>Leaderboard</span>
+            </Link>
+            <Link to="/messages" className={`sidebar-link ${location.pathname === '/messages' ? 'active' : ''}`}>
+              <MessageSquare size={18} />
+              <span>Messages</span>
             </Link>
           </>
         )}
@@ -1066,7 +1076,8 @@ export function WorkLogs() {
 
   // Form states
   const [category, setCategory] = useState<'Coding' | 'Learning' | 'Nothing Today'>('Coding');
-  const [hours, setHours] = useState('');
+  const [logHours, setLogHours] = useState('');
+  const [logMinutes, setLogMinutes] = useState('');
   const [description, setDescription] = useState('');
 
   // Filters (None, we removed them)
@@ -1090,8 +1101,8 @@ export function WorkLogs() {
     
     const isNothingToday = category === 'Nothing Today';
     
-    if (!isNothingToday && (!hours || !description.trim())) {
-      showError('Please enter hours and description');
+    if (!isNothingToday && (!logHours || !logMinutes || !description.trim())) {
+      showError('Please enter hours, minutes, and description');
       return;
     }
     
@@ -1099,9 +1110,23 @@ export function WorkLogs() {
     let desc = 'Nothing Today';
     
     if (!isNothingToday) {
-      h = parseFloat(hours);
-      if (isNaN(h) || h <= 0 || h > 24) {
-        showError('Hours must be a number between 0 and 24');
+      const hoursVal = parseInt(logHours, 10);
+      const minsVal = parseInt(logMinutes, 10);
+      if (isNaN(hoursVal) || hoursVal < 0 || hoursVal > 24) {
+        showError('Hours must be an integer between 0 and 24');
+        return;
+      }
+      if (isNaN(minsVal) || minsVal < 0 || minsVal > 59) {
+        showError('Minutes must be an integer between 0 and 59');
+        return;
+      }
+      h = hoursVal + (minsVal / 60.0);
+      if (h <= 0) {
+        showError('Total log time must be greater than 0');
+        return;
+      }
+      if (h > 24) {
+        showError('Total log time cannot exceed 24 hours');
         return;
       }
       desc = description.trim();
@@ -1118,7 +1143,8 @@ export function WorkLogs() {
       showSuccess('Work hours logged successfully!');
       
       // Reset form & reload
-      setHours('');
+      setLogHours('');
+      setLogMinutes('');
       setDescription('');
       fetchLogs();
     } catch (err: any) {
@@ -1126,6 +1152,15 @@ export function WorkLogs() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const formatHours = (hoursFloat: number) => {
+    const h = Math.floor(hoursFloat);
+    const m = Math.round((hoursFloat - h) * 60);
+    if (h === 0 && m === 0) return '0 hrs';
+    if (h === 0) return `${m} mins`;
+    if (m === 0) return `${h} hrs`;
+    return `${h}h ${m}m`;
   };
 
   return (
@@ -1160,16 +1195,32 @@ export function WorkLogs() {
               </select>
             </div>
 
-            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 150px' }}>
-              <label className="form-label" htmlFor="hours">Hours Invested</label>
+            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 100px' }}>
+              <label className="form-label" htmlFor="logHours">Hours</label>
               <input 
-                id="hours"
-                type="number" 
-                step="0.5"
-                placeholder={category === 'Nothing Today' ? '0' : 'e.g. 4.5'}
+                id="logHours"
+                type="number"
+                min="0"
+                max="24"
+                placeholder="0"
                 className="form-input" 
-                value={category === 'Nothing Today' ? '0' : hours} 
-                onChange={(e) => setHours(e.target.value)} 
+                value={category === 'Nothing Today' ? '0' : logHours} 
+                onChange={(e) => setLogHours(e.target.value)} 
+                disabled={submitting || category === 'Nothing Today'}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 100px' }}>
+              <label className="form-label" htmlFor="logMinutes">Minutes</label>
+              <input 
+                id="logMinutes"
+                type="number"
+                min="0"
+                max="59"
+                placeholder="0"
+                className="form-input" 
+                value={category === 'Nothing Today' ? '0' : logMinutes} 
+                onChange={(e) => setLogMinutes(e.target.value)} 
                 disabled={submitting || category === 'Nothing Today'}
               />
             </div>
@@ -1228,7 +1279,7 @@ export function WorkLogs() {
                         {log.category}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{log.hours.toFixed(1)} hrs</td>
+                    <td style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{formatHours(log.hours)}</td>
                     <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.description}>
                       {log.description}
                     </td>
@@ -3937,6 +3988,379 @@ export function AdminPerformance() {
   );
 }
 
+
+// ==============================================================================================================
+// PAGE: USER MESSAGES
+// ==============================================================================================================
+
+export function UserMessages() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const { showSuccess, showError, ToastComponent } = useToast();
+
+  const fetchMessages = async (skipCount = 0) => {
+    try {
+      if (skipCount === 0) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+      const data = await api.getReceivedMessages(5, skipCount);
+      if (skipCount === 0) {
+        setMessages(data);
+      } else {
+        setMessages((prev) => [...prev, ...data]);
+      }
+      setHasMore(data.length === 5);
+    } catch (err: any) {
+      showError(err.message || 'Failed to load messages');
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMessages(0);
+  }, []);
+
+  const handleDelete = async (messageId: number) => {
+    if (!window.confirm('Are you sure you want to delete this message?')) return;
+    try {
+      await api.deleteMessage(messageId);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      showSuccess('Message deleted successfully');
+    } catch (err: any) {
+      showError(err.message || 'Failed to delete message');
+    }
+  };
+
+  return (
+    <Layout>
+      {ToastComponent}
+      <div className="page-header">
+        <div className="page-title-section">
+          <h1 className="page-title">Received Messages</h1>
+          <span className="page-subtitle">View notifications and guidelines sent by administrators.</span>
+        </div>
+      </div>
+
+      <div className="glass-card" style={{ padding: '2rem' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '3rem' }}>
+            <div className="spinner" style={{ margin: '0 auto' }}></div>
+          </div>
+        ) : messages.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {messages.map((msg) => (
+              <div 
+                key={msg.id} 
+                className="glass-card" 
+                style={{ 
+                  padding: '1.25rem', 
+                  background: 'rgba(255, 255, 255, 0.03)', 
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'start',
+                  gap: '1rem'
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '0.95rem' }}>
+                      Admin: {msg.sender_name || 'System'}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      • {new Date(msg.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                    {msg.content}
+                  </p>
+                </div>
+                <button 
+                  className="btn btn-outline" 
+                  style={{ 
+                    padding: '0.4rem', 
+                    minWidth: 'auto', 
+                    borderRadius: '6px', 
+                    color: '#ff4d4f', 
+                    borderColor: 'rgba(255, 77, 79, 0.2)' 
+                  }}
+                  onClick={() => handleDelete(msg.id)}
+                  title="Delete message"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+
+            {hasMore && (
+              <button 
+                className="btn btn-outline" 
+                style={{ alignSelf: 'center', marginTop: '1rem', minWidth: '150px' }} 
+                onClick={() => fetchMessages(messages.length)}
+                disabled={loadingMore}
+              >
+                {loadingMore ? 'Loading...' : 'Load More'}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="empty-state" style={{ padding: '3rem 0' }}>
+            <MessageSquare size={48} className="empty-icon" style={{ opacity: 0.5 }} />
+            <h3>No messages yet</h3>
+            <p>You haven't received any messages from the admin yet.</p>
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
+
+// ==============================================================================================================
+// PAGE: ADMIN MESSAGES
+// ==============================================================================================================
+
+export function AdminMessages() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [recipientId, setRecipientId] = useState('');
+  const [content, setContent] = useState('');
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const { showSuccess, showError, ToastComponent } = useToast();
+
+  const fetchUsers = async () => {
+    try {
+      const data = await api.adminGetUsers();
+      // Filter out admin users
+      setUsers(data.filter(u => u.role === 'user' && u.is_active));
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const fetchSentMessages = async (skipCount = 0) => {
+    try {
+      if (skipCount === 0) {
+        setLoadingMessages(true);
+      } else {
+        setLoadingMore(true);
+      }
+      const data = await api.getSentMessages(5, skipCount);
+      if (skipCount === 0) {
+        setMessages(data);
+      } else {
+        setMessages((prev) => [...prev, ...data]);
+      }
+      setHasMore(data.length === 5);
+    } catch (err: any) {
+      showError(err.message || 'Failed to load sent messages');
+    } finally {
+      setLoadingMessages(false);
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    fetchSentMessages(0);
+  }, []);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recipientId) {
+      showError('Please select a recipient');
+      return;
+    }
+    if (!content.trim()) {
+      showError('Please type a message');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const newMsg = await api.sendMessage(Number(recipientId), content.trim());
+      showSuccess('Message sent successfully!');
+      setContent('');
+      // Prepend to messages list
+      setMessages(prev => [newMsg, ...prev]);
+    } catch (err: any) {
+      showError(err.message || 'Failed to send message');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (messageId: number) => {
+    if (!window.confirm('Are you sure you want to delete this message?')) return;
+    try {
+      await api.deleteMessage(messageId);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      showSuccess('Message deleted successfully');
+    } catch (err: any) {
+      showError(err.message || 'Failed to delete message');
+    }
+  };
+
+  return (
+    <Layout>
+      {ToastComponent}
+      <div className="page-header">
+        <div className="page-title-section">
+          <h1 className="page-title">Admin Messaging</h1>
+          <span className="page-subtitle">Send guidelines or direct feedback to individual team members.</span>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem', alignItems: 'start' }}>
+        
+        {/* SEND MESSAGE FORM */}
+        <div className="glass-card" style={{ padding: '1.5rem' }}>
+          <h3 className="section-title" style={{ marginTop: 0, marginBottom: '1.25rem' }}>
+            <Send size={18} /> Send New Message
+          </h3>
+          <form onSubmit={handleSend}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="recipient">Recipient User</label>
+              {loadingUsers ? (
+                <div style={{ padding: '0.5rem 0' }}>Loading users...</div>
+              ) : (
+                <select
+                  id="recipient"
+                  className="form-input form-select"
+                  value={recipientId}
+                  onChange={(e) => setRecipientId(e.target.value)}
+                  disabled={submitting}
+                >
+                  <option value="">-- Select Recipient User --</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name} (@{u.username})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="content">Message Content</label>
+              <textarea
+                id="content"
+                rows={5}
+                placeholder="Type your message here..."
+                className="form-input"
+                style={{ resize: 'vertical', minHeight: '100px' }}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', height: '42px' }}
+              disabled={submitting || loadingUsers}
+            >
+              <Send size={16} />
+              {submitting ? 'Sending...' : 'Send Message'}
+            </button>
+          </form>
+        </div>
+
+        {/* RECENTLY SENT LIST */}
+        <div className="glass-card" style={{ padding: '1.5rem' }}>
+          <h3 className="section-title" style={{ marginTop: 0, marginBottom: '1.25rem' }}>
+            <MessageSquare size={18} /> Recently Sent
+          </h3>
+          
+          {loadingMessages ? (
+            <div style={{ textAlign: 'center', padding: '2rem' }}>
+              <div className="spinner" style={{ margin: '0 auto' }}></div>
+            </div>
+          ) : messages.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {messages.map((msg) => (
+                <div 
+                  key={msg.id} 
+                  className="glass-card" 
+                  style={{ 
+                    padding: '1rem', 
+                    background: 'rgba(255, 255, 255, 0.02)', 
+                    border: '1px solid rgba(255, 255, 255, 0.04)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'start',
+                    gap: '0.75rem'
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--color-secondary)', fontSize: '0.85rem' }}>
+                        To: {msg.recipient_name || 'User'}
+                      </span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        {new Date(msg.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+                      {msg.content}
+                    </p>
+                  </div>
+                  <button 
+                    className="btn btn-outline" 
+                    style={{ 
+                      padding: '0.3rem', 
+                      minWidth: 'auto', 
+                      borderRadius: '5px', 
+                      color: '#ff4d4f', 
+                      borderColor: 'rgba(255, 77, 79, 0.15)',
+                      marginTop: '0.2rem'
+                    }}
+                    onClick={() => handleDelete(msg.id)}
+                    title="Delete message"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+
+              {hasMore && (
+                <button 
+                  className="btn btn-outline" 
+                  style={{ alignSelf: 'center', marginTop: '0.5rem', width: '100%', fontSize: '0.85rem' }} 
+                  onClick={() => fetchSentMessages(messages.length)}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? 'Loading...' : 'Load More'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="empty-state" style={{ padding: '2rem 0' }}>
+              <MessageSquare size={36} className="empty-icon" style={{ opacity: 0.4 }} />
+              <p style={{ fontSize: '0.9rem', margin: '0.5rem 0 0 0' }}>No sent messages found.</p>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </Layout>
+  );
+}
+
+
 // ==============================================================================================================
 // MAIN ROOT APP COMPONENT
 // ============================================================================
@@ -3991,6 +4415,12 @@ export default function App() {
             </ProtectedRoute>
           } />
 
+          <Route path="/messages" element={
+            <ProtectedRoute>
+              <UserMessages />
+            </ProtectedRoute>
+          } />
+
           {/* ADMIN ONLY ROUTES */}
           <Route path="/admin/dashboard" element={
             <ProtectedRoute adminOnly={true}>
@@ -4019,6 +4449,12 @@ export default function App() {
           <Route path="/admin/settings" element={
             <ProtectedRoute adminOnly={true}>
               <AdminSettings />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin/messages" element={
+            <ProtectedRoute adminOnly={true}>
+              <AdminMessages />
             </ProtectedRoute>
           } />
 

@@ -121,6 +121,16 @@ export interface EmailLog {
   created_at: string;
 }
 
+export interface Message {
+  id: number;
+  sender_id: number;
+  recipient_id: number;
+  content: string;
+  created_at: string;
+  sender_name?: string;
+  recipient_name?: string;
+}
+
 // Request Interceptor Helper
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('access_token');
@@ -376,6 +386,28 @@ export const api = {
     return request<{ detail: string }>('/notifications/broadcast', {
       method: 'POST',
       body: JSON.stringify({ subject, body }),
+    });
+  },
+
+  // Messaging APIs
+  async sendMessage(recipientId: number, content: string): Promise<Message> {
+    return request<Message>('/messages', {
+      method: 'POST',
+      body: JSON.stringify({ recipient_id: recipientId, content }),
+    });
+  },
+
+  async getReceivedMessages(limit: number = 5, skip: number = 0): Promise<Message[]> {
+    return request<Message[]>(`/messages/received?limit=${limit}&skip=${skip}`);
+  },
+
+  async getSentMessages(limit: number = 5, skip: number = 0): Promise<Message[]> {
+    return request<Message[]>(`/messages/sent?limit=${limit}&skip=${skip}`);
+  },
+
+  async deleteMessage(messageId: number): Promise<{ detail: string }> {
+    return request<{ detail: string }>(`/messages/${messageId}`, {
+      method: 'DELETE',
     });
   },
 };

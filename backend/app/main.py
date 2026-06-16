@@ -1198,3 +1198,62 @@ def trigger_broadcast_email(
     return {
         "detail": f"Broadcast processed. Sent {sent_count} emails successfully. Failed {failed_count} emails."
     }
+
+
+# ==========================================
+# MESSAGING ROUTERS
+# ==========================================
+
+@app.post(f"{settings.API_V1_STR}/messages", response_model=schemas.MessageResponse)
+def send_message(
+    message_data: schemas.MessageCreate,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    # Check if recipient exists
+    recipient = crud.get_user(db, message_data.recipient_id)
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient user not found")
+    
+    db_msg = crud.create_message(db, sender_id=current_admin.id, message=message_data)
+    
+    # Log Activity
+    crud.log_activity(
+        db, user_id=current_admin.id, user_name=current_admin.full_name,
+        activity_type="send_message",
+        detail=f"Sent message to {recipient.full_name}: {message_data.content[:50]}"
+    )
+    db.commit()
+    return db_msg
+
+
+@app.get(f"{settings.API_V1_STR}/messages/received", response_model=List[schemas.MessageResponse])
+def get_received_messages(
+    limit: int = 5,
+    skip: int = 0,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    return crud.get_received_messages(db, user_id=current_user.id, limit=limit, skip=skip)
+
+
+@app.get(f"{settings.API_V1_STR}/messages/sent", response_model=List[schemas.MessageResponse])
+def get_sent_messages(
+    limit: int = 5,
+    skip: int = 0,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    return crud.get_sent_messages(db, admin_id=current_admin.id, limit=limit, skip=skip)
+
+
+@app.delete(f"{settings.API_V1_STR}/messages/{{message_id}}")
+def delete_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    success = crud.delete_message(db, message_id=message_id, user_id=current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Message not found or unauthorized to delete")
+    return {"detail": "Message deleted successfully"}

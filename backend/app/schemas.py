@@ -213,3 +213,22 @@ class ActivityLogResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Message schemas
+class MessageCreate(BaseModel):
+    recipient_id: int
+    content: str
+
+
+class MessageResponse(BaseModel):
+    id: int
+    sender_id: int
+    recipient_id: int
+    content: str
+    created_at: datetime
+    sender_name: Optional[str] = None
+    recipient_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
