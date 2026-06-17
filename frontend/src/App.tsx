@@ -306,6 +306,13 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+const toLocalDateString = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // ============================================================================
 // COMPONENT: HEATMAP (GITHUB STYLE)
 // ============================================================================
@@ -319,7 +326,7 @@ function HeatmapCalendar({ logs }: { logs: Record<string, number> }) {
     for (let i = 30; i >= 0; i--) {
       const d = new Date();
       d.setDate(today.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = toLocalDateString(d);
       const hours = logs[dateStr] || 0;
       
       const monthName = d.toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -1262,7 +1269,7 @@ export function WorkLogs() {
     setSubmitting(true);
     try {
       await api.logWork({
-        date: new Date().toISOString().split('T')[0],
+        date: toLocalDateString(new Date()),
         category,
         hours: h,
         description: desc,

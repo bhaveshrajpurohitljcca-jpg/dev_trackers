@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, 
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.db.session import Base
+from app.core.config import get_ist_time
 
 class User(Base):
     __tablename__ = "users"
@@ -15,7 +16,7 @@ class User(Base):
     primary_team = Column(String, nullable=True)
     secondary_team = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
-    created_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_date = Column(DateTime, default=get_ist_time)
 
     @property
     def team(self):
@@ -73,7 +74,7 @@ class UserTechnology(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     technology_id = Column(Integer, ForeignKey("technologies.id"), nullable=False)
-    assigned_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    assigned_date = Column(DateTime, default=get_ist_time)
 
     # Relationships
     user = relationship("User", back_populates="assigned_technologies")
@@ -88,7 +89,7 @@ class CompletedTopic(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     topic_id = Column(Integer, ForeignKey("topics.id"), nullable=False)
-    completed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    completed_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     user = relationship("User", back_populates="completed_topics")
@@ -106,7 +107,7 @@ class DailyLog(Base):
     category = Column(String, nullable=False)  # Coding, Learning, Research, Other
     hours = Column(Float, nullable=False)
     description = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     user = relationship("User", back_populates="daily_logs")
@@ -137,7 +138,7 @@ class ProjectLog(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     hours = Column(Float, nullable=False)
     description = Column(Text, nullable=False)
-    logged_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    logged_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     project = relationship("Project", back_populates="logs")
@@ -176,7 +177,7 @@ class UserAchievement(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     achievement_id = Column(Integer, ForeignKey("achievements.id"), nullable=False)
-    unlocked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    unlocked_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     user = relationship("User", back_populates="achievements")
@@ -193,7 +194,7 @@ class EmailLog(Base):
     subject = Column(String, nullable=False)
     body = Column(Text, nullable=False)
     status = Column(String, nullable=False, default="Sent")  # Sent, Failed
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_ist_time)
 
 
 class ActivityLog(Base):
@@ -204,7 +205,7 @@ class ActivityLog(Base):
     user_name = Column(String, nullable=False)
     activity_type = Column(String, nullable=False)  # log_hours, complete_topic, project_created, achievement_unlocked, etc.
     detail = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     user = relationship("User", back_populates="activity_logs")
@@ -231,7 +232,7 @@ class Message(Base):
     recipient_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     content = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")

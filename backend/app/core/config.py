@@ -40,3 +40,13 @@ settings = Settings()
 if settings.DATABASE_URL.startswith("postgres://"):
     settings.DATABASE_URL = settings.DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+
+from datetime import datetime, timezone, timedelta
+
+def get_ist_time() -> datetime:
+    # IST is UTC + 5:30
+    return datetime.now(timezone(timedelta(hours=5, minutes=30))).replace(tzinfo=None)
+
+def get_ist_date():
+    return datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
+

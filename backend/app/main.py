@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from jose import jwt, JWTError
 
 from app.db.session import engine, Base, get_db
-from app.core.config import settings
+from app.core.config import settings, get_ist_date, get_ist_time
 from app.core.security import verify_password, create_access_token
 from app.core.mail import send_email_smtp
 from app.core import security
@@ -381,16 +381,16 @@ def log_work(log_data: schemas.DailyLogCreate, db: Session = Depends(get_db), cu
     # Check if user is logging for today and if it is past deadline
     # Note: local server time is used
     log_date = log_data.date
-    today = date.today()
+    today = get_ist_date()
     
     # If logging for today
     if log_date == today:
-        now_time = datetime.now().time()
+        now_time = get_ist_time().time()
         deadline_time = datetime.strptime(deadline_str, "%H:%M").time()
         
         # Calculate deadline with grace period
         deadline_dt = datetime.combine(today, deadline_time) + timedelta(minutes=grace_mins)
-        now_dt = datetime.now()
+        now_dt = get_ist_time()
         
         if now_dt > deadline_dt:
             # We still allow logging but it will be flagged or we can just log it
@@ -576,7 +576,7 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
     users = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).all()
     user_ids = [u.id for u in users]
     
-    today = date.today()
+    today = get_ist_date()
     start_of_week = today - timedelta(days=today.weekday()) # Monday
     start_of_month = today.replace(day=1)
     
@@ -701,7 +701,7 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
     crud.verify_and_reset_expired_streak(db, user_id)
     
     # Date calculations
-    today = date.today()
+    today = get_ist_date()
     start_of_week = today - timedelta(days=today.weekday())
     start_of_month = today.replace(day=1)
     
@@ -818,7 +818,7 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
 
 @app.get(f"{settings.API_V1_STR}/admin/dashboard")
 def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
-    today = date.today()
+    today = get_ist_date()
     start_of_week = today - timedelta(days=today.weekday())
     start_of_month = today.replace(day=1)
     
@@ -921,7 +921,7 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
 
 @app.get(f"{settings.API_V1_STR}/admin/performance")
 def get_admin_user_performance(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
-    today = date.today()
+    today = get_ist_date()
     start_of_week = today - timedelta(days=today.weekday()) # Monday
     week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
     week_days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -1026,7 +1026,7 @@ def get_admin_user_performance(db: Session = Depends(get_db), current_admin: mod
 @app.post(f"{settings.API_V1_STR}/notifications/reminder")
 def trigger_daily_reminders(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
     """Triggers mock reminder emails for active users who haven't logged today's work yet"""
-    today = date.today()
+    today = get_ist_date()
     settings_rec = crud.get_settings(db)
     deadline_time = settings_rec.daily_log_deadline
     
@@ -1083,7 +1083,7 @@ def trigger_daily_reminders(db: Session = Depends(get_db), current_admin: models
 @app.post(f"{settings.API_V1_STR}/notifications/deadline-check")
 def trigger_deadline_missing_logs(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
     """Triggers mock deadline warnings for active users who missed today's work log"""
-    today = date.today()
+    today = get_ist_date()
     settings_rec = crud.get_settings(db)
     deadline_time = settings_rec.daily_log_deadline
     

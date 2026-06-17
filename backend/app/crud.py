@@ -4,6 +4,7 @@ from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from app import models, schemas
 from app.core.security import get_password_hash
+from app.core.config import get_ist_date, get_ist_time
 
 # ==========================================
 # USER OPERATIONS
@@ -353,7 +354,7 @@ def update_user_streak(db: Session, user_id: int, log_date: date):
 def verify_and_reset_expired_streak(db: Session, user_id: int):
     db_streak = db.query(models.Streak).filter(models.Streak.user_id == user_id).first()
     if db_streak and db_streak.last_log_date:
-        today = date.today()
+        today = get_ist_date()
         if db_streak.last_log_date < today - timedelta(days=1):
             db_streak.current_streak = 0
             db.commit()
@@ -434,7 +435,7 @@ def log_project_hours(db: Session, project_id: int, user_id: int, log_data: sche
     
     # Also create a DailyLog entry corresponding to this coding log automatically for ease of use
     # Check if there is already a DailyLog for today, if not or if yes, add it to maintain daily log stats
-    today_date = date.today()
+    today_date = get_ist_date()
     daily_log = schemas.DailyLogCreate(
         date=today_date,
         category="Coding",
