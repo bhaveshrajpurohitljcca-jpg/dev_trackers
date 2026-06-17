@@ -559,3 +559,21 @@ def delete_message(db: Session, message_id: int, user_id: int):
         db.commit()
         return True
     return False
+
+def mark_message_read(db: Session, message_id: int, user_id: int):
+    db_msg = db.query(models.Message).filter(
+        models.Message.id == message_id,
+        models.Message.recipient_id == user_id
+    ).first()
+    if not db_msg:
+        return None
+    db_msg.is_read = True
+    db.commit()
+    db.refresh(db_msg)
+    return db_msg
+
+def get_unread_messages_count(db: Session, user_id: int):
+    return db.query(models.Message).filter(
+        models.Message.recipient_id == user_id,
+        models.Message.is_read == False
+    ).count()

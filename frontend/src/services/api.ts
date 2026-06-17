@@ -126,6 +126,7 @@ export interface Message {
   sender_id: number;
   recipient_id: number;
   content: string;
+  is_read: boolean;
   created_at: string;
   sender_name?: string;
   recipient_name?: string;
@@ -409,5 +410,15 @@ export const api = {
     return request<{ detail: string }>(`/messages/${messageId}`, {
       method: 'DELETE',
     });
+  },
+
+  async markMessageRead(messageId: number): Promise<Message> {
+    return request<Message>(`/messages/${messageId}/read`, {
+      method: 'PATCH',
+    });
+  },
+
+  async getUnreadMessageCount(): Promise<{ count: number }> {
+    return request<{ count: number }>('/messages/unread-count');
   },
 };

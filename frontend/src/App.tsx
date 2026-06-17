@@ -164,11 +164,29 @@ function Sidebar() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
+
+  useEffect(() => {
+    if (!user || user.role !== 'user') return;
+    
+    const fetchUnreadCount = async () => {
+      try {
+        const res = await api.getUnreadMessageCount();
+        setUnreadCount(res.count);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [user, location.pathname]);
 
   if (!user) return null;
 
@@ -235,6 +253,22 @@ function Sidebar() {
             <Link to="/messages" className={`sidebar-link ${location.pathname === '/messages' ? 'active' : ''}`}>
               <MessageSquare size={18} />
               <span>Messages</span>
+              {unreadCount > 0 && (
+                <span 
+                  style={{ 
+                    marginLeft: 'auto', 
+                    background: '#ef4444', 
+                    color: 'white', 
+                    borderRadius: '9999px', 
+                    padding: '0.1rem 0.45rem', 
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    lineHeight: 1
+                  }}
+                >
+                  {unreadCount}
+                </span>
+              )}
             </Link>
           </>
         )}
@@ -558,11 +592,16 @@ export function Login() {
 export function UserDashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [unreadMessages, setUnreadMessages] = useState<Message[]>([]);
+  const { showSuccess, showError, ToastComponent } = useToast();
 
   const fetchDashboard = async () => {
     try {
       const dbData = await api.getUserDashboard();
       setData(dbData);
+      
+      const received = await api.getReceivedMessages(5, 0);
+      setUnreadMessages(received.filter(m => !m.is_read));
     } catch (err) {
       console.error(err);
     } finally {
@@ -574,10 +613,98 @@ export function UserDashboard() {
     fetchDashboard();
   }, []);
 
+  const handleMarkSeen = async (messageId: number) => {
+    try {
+      await api.markMessageRead(messageId);
+      setUnreadMessages(prev => prev.filter(m => m.id !== messageId));
+      showSuccess('Message marked as seen');
+    } catch (err: any) {
+      showError(err.message || 'Failed to mark as read');
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: number) => {
+    if (!window.confirm('Are you sure you want to delete this message?')) return;
+    try {
+      await api.deleteMessage(messageId);
+      setUnreadMessages(prev => prev.filter(m => m.id !== messageId));
+      showSuccess('Message deleted successfully');
+    } catch (err: any) {
+      showError(err.message || 'Failed to delete message');
+    }
+  };
+
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
 
   return (
     <Layout>
+      {ToastComponent}
+      {/* FLOATING NEW MESSAGES ALERT */}
+      {unreadMessages.length > 0 && (
+        <div 
+          className="glass-card" 
+          style={{ 
+            position: 'fixed', 
+            bottom: '2rem', 
+            right: '2rem', 
+            zIndex: 9999, 
+            width: '380px', 
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)',
+            borderLeft: '4px solid var(--color-primary, #6366f1)',
+            padding: '1.25rem',
+            background: 'rgba(17, 24, 39, 0.95)',
+            backdropFilter: 'blur(12px)'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h4 style={{ margin: 0, fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <MessageSquare size={16} color="var(--color-primary)" />
+              New Message from Admin
+            </h4>
+            <span style={{ fontSize: '0.75rem', background: '#ef4444', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 600 }}>
+              {unreadMessages.length} New
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '250px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+            {unreadMessages.map((msg) => (
+              <div 
+                key={msg.id} 
+                style={{ 
+                  background: 'rgba(255, 255, 255, 0.02)', 
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  padding: '0.75rem',
+                  borderRadius: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                  <span>Sent by {msg.sender_name || 'Admin'}</span>
+                  <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+                <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+                  {msg.content}
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                  <button 
+                    className="btn btn-outline" 
+                    style={{ padding: '0.2rem 0.5rem', minWidth: 'auto', fontSize: '0.75rem', height: '24px', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                    onClick={() => handleMarkSeen(msg.id)}
+                  >
+                    <Check size={12} /> Seen
+                  </button>
+                  <button 
+                    className="btn btn-outline" 
+                    style={{ padding: '0.2rem', minWidth: 'auto', height: '24px', color: '#ff4d4f', borderColor: 'rgba(255, 77, 79, 0.15)' }}
+                    onClick={() => handleDeleteMessage(msg.id)}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ 
         marginBottom: '2rem', 
         padding: '2.5rem 2rem', 
@@ -4014,6 +4141,18 @@ export function UserMessages() {
         setMessages((prev) => [...prev, ...data]);
       }
       setHasMore(data.length === 5);
+
+      // Automatically mark unread messages as read
+      data.forEach(async (msg) => {
+        if (!msg.is_read) {
+          try {
+            await api.markMessageRead(msg.id);
+            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, is_read: true } : m));
+          } catch (e) {
+            console.error('Failed to mark message as read:', e);
+          }
+        }
+      });
     } catch (err: any) {
       showError(err.message || 'Failed to load messages');
     } finally {
@@ -4060,8 +4199,9 @@ export function UserMessages() {
                 className="glass-card" 
                 style={{ 
                   padding: '1.25rem', 
-                  background: 'rgba(255, 255, 255, 0.03)', 
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: msg.is_read ? 'rgba(255, 255, 255, 0.03)' : 'rgba(99, 102, 241, 0.05)', 
+                  border: msg.is_read ? '1px solid rgba(255, 255, 255, 0.05)' : '1px solid rgba(99, 102, 241, 0.2)',
+                  borderLeft: msg.is_read ? '1px solid rgba(255, 255, 255, 0.05)' : '4px solid var(--color-primary, #6366f1)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'start',
@@ -4073,6 +4213,11 @@ export function UserMessages() {
                     <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '0.95rem' }}>
                       Admin: {msg.sender_name || 'System'}
                     </span>
+                    {!msg.is_read && (
+                      <span style={{ fontSize: '0.7rem', background: '#ef4444', color: 'white', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                        New
+                      </span>
+                    )}
                     <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                       • {new Date(msg.created_at).toLocaleString()}
                     </span>

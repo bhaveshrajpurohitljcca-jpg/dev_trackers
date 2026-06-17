@@ -54,6 +54,24 @@ try:
                 db_mig.rollback()
             finally:
                 db_mig.close()
+                
+    if "messages" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("messages")]
+        if "is_read" not in columns:
+            db_mig = next(get_db())
+            try:
+                dialect = db_mig.bind.dialect.name
+                if dialect == "sqlite":
+                    db_mig.execute(text("ALTER TABLE messages ADD COLUMN is_read BOOLEAN DEFAULT 0"))
+                else:
+                    db_mig.execute(text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT 0"))
+                db_mig.commit()
+                print("Added column is_read to messages table.")
+            except Exception as e:
+                print(f"Messages Migration error: {e}")
+                db_mig.rollback()
+            finally:
+                db_mig.close()
 except Exception as e:
     print(f"Inspector migration error: {e}")
 
@@ -1270,3 +1288,24 @@ def delete_message(
     if not success:
         raise HTTPException(status_code=404, detail="Message not found or unauthorized to delete")
     return {"detail": "Message deleted successfully"}
+
+
+@app.patch(f"{settings.API_V1_STR}/messages/{{message_id}}/read", response_model=schemas.MessageResponse)
+def mark_message_read(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    db_msg = crud.mark_message_read(db, message_id=message_id, user_id=current_user.id)
+    if not db_msg:
+        raise HTTPException(status_code=404, detail="Message not found or unauthorized")
+    return db_msg
+
+
+@app.get(f"{settings.API_V1_STR}/messages/unread-count")
+def get_unread_messages_count(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    count = crud.get_unread_messages_count(db, user_id=current_user.id)
+    return {"count": count}

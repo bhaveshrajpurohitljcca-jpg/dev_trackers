@@ -226,6 +226,7 @@ class MessageResponse(BaseModel):
     sender_id: int
     recipient_id: int
     content: str
+    is_read: bool
     created_at: datetime
     sender_name: Optional[str] = None
     recipient_name: Optional[str] = None
