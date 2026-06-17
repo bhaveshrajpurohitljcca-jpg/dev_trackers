@@ -1235,6 +1235,35 @@ def trigger_broadcast_email(
 # MESSAGING ROUTERS
 # ==========================================
 
+@app.get(f"{settings.API_V1_STR}/messages/unread-count")
+def get_unread_messages_count(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    count = crud.get_unread_messages_count(db, user_id=current_user.id)
+    return {"count": count}
+
+
+@app.get(f"{settings.API_V1_STR}/messages/received", response_model=List[schemas.MessageResponse])
+def get_received_messages(
+    limit: int = 5,
+    skip: int = 0,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    return crud.get_received_messages(db, user_id=current_user.id, limit=limit, skip=skip)
+
+
+@app.get(f"{settings.API_V1_STR}/messages/sent", response_model=List[schemas.MessageResponse])
+def get_sent_messages(
+    limit: int = 5,
+    skip: int = 0,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    return crud.get_sent_messages(db, admin_id=current_admin.id, limit=limit, skip=skip)
+
+
 @app.post(f"{settings.API_V1_STR}/messages", response_model=schemas.MessageResponse)
 def send_message(
     message_data: schemas.MessageCreate,
@@ -1258,38 +1287,6 @@ def send_message(
     return db_msg
 
 
-@app.get(f"{settings.API_V1_STR}/messages/received", response_model=List[schemas.MessageResponse])
-def get_received_messages(
-    limit: int = 5,
-    skip: int = 0,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    return crud.get_received_messages(db, user_id=current_user.id, limit=limit, skip=skip)
-
-
-@app.get(f"{settings.API_V1_STR}/messages/sent", response_model=List[schemas.MessageResponse])
-def get_sent_messages(
-    limit: int = 5,
-    skip: int = 0,
-    db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
-):
-    return crud.get_sent_messages(db, admin_id=current_admin.id, limit=limit, skip=skip)
-
-
-@app.delete(f"{settings.API_V1_STR}/messages/{{message_id}}")
-def delete_message(
-    message_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    success = crud.delete_message(db, message_id=message_id, user_id=current_user.id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Message not found or unauthorized to delete")
-    return {"detail": "Message deleted successfully"}
-
-
 @app.patch(f"{settings.API_V1_STR}/messages/{{message_id}}/read", response_model=schemas.MessageResponse)
 def mark_message_read(
     message_id: int,
@@ -1302,10 +1299,13 @@ def mark_message_read(
     return db_msg
 
 
-@app.get(f"{settings.API_V1_STR}/messages/unread-count")
-def get_unread_messages_count(
+@app.delete(f"{settings.API_V1_STR}/messages/{{message_id}}")
+def delete_message(
+    message_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    count = crud.get_unread_messages_count(db, user_id=current_user.id)
-    return {"count": count}
+    success = crud.delete_message(db, message_id=message_id, user_id=current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Message not found or unauthorized to delete")
+    return {"detail": "Message deleted successfully"}
