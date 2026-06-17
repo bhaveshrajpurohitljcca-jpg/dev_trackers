@@ -64,7 +64,7 @@ try:
                 if dialect == "sqlite":
                     db_mig.execute(text("ALTER TABLE messages ADD COLUMN is_read BOOLEAN DEFAULT 0"))
                 else:
-                    db_mig.execute(text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT 0"))
+                    db_mig.execute(text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE"))
                 db_mig.commit()
                 print("Added column is_read to messages table.")
             except Exception as e:
