@@ -238,25 +238,62 @@ def get_daily_logs(db: Session, user_id: Optional[int] = None, skip: int = 0, li
     return query.order_by(models.DailyLog.date.desc()).offset(skip).limit(limit).all()
 
 def create_daily_log(db: Session, user_id: int, log_data: schemas.DailyLogCreate):
-    # Check if a log for this user and date already exists
-    existing_log = db.query(models.DailyLog).filter(
+    # Fetch all existing logs for this user on the given date
+    existing_logs = db.query(models.DailyLog).filter(
         models.DailyLog.user_id == user_id,
         models.DailyLog.date == log_data.date
-    ).first()
+    ).all()
     
-    db_log = models.DailyLog(
-        user_id=user_id,
-        date=log_data.date,
-        category=log_data.category,
-        hours=log_data.hours,
-        description=log_data.description
-    )
-    db.add(db_log)
-    db.commit()
-    db.refresh(db_log)
+    is_nothing_today = log_data.category.lower() in ["nothing today", "nothing_today"]
+    
+    # Check 1: If 'Nothing Today' is already logged for this date, block any new log
+    for log in existing_logs:
+        if log.category.lower() in ["nothing today", "nothing_today"]:
+            raise ValueError("Cannot log activity because 'Nothing Today' has already been logged for this date.")
+            
+    # Check 2: If trying to log 'Nothing Today', but there are already other logs
+    if is_nothing_today and len(existing_logs) > 0:
+        raise ValueError("Cannot log 'Nothing Today' because other activities have already been logged for this date.")
+        
+    # Check 3: Check if a log for this exact category already exists
+    existing_category_log = None
+    for log in existing_logs:
+        if log.category.lower() == log_data.category.lower():
+            existing_category_log = log
+            break
+            
+    other_categories_hours = sum(log.hours for log in existing_logs if log != existing_category_log)
+    
+    # Calculate the potential new total hours for the day
+    new_total_hours = other_categories_hours + log_data.hours
+    if existing_category_log:
+        new_total_hours += existing_category_log.hours
+        
+    if new_total_hours > 24.0:
+        raise ValueError("Total working hours for a single day (Coding + Learning + etc.) cannot exceed 24 hours.")
+        
+    # If a log for this category already exists, update it
+    if existing_category_log:
+        existing_category_log.hours += log_data.hours
+        existing_category_log.description = existing_category_log.description + " | " + log_data.description
+        db.commit()
+        db.refresh(existing_category_log)
+        db_log = existing_category_log
+    else:
+        # Create a new log entry
+        db_log = models.DailyLog(
+            user_id=user_id,
+            date=log_data.date,
+            category=log_data.category,
+            hours=log_data.hours,
+            description=log_data.description
+        )
+        db.add(db_log)
+        db.commit()
+        db.refresh(db_log)
     
     # Update Streak
-    if log_data.category.lower() in ["nothing today", "nothing_today"]:
+    if is_nothing_today:
         db_streak = db.query(models.Streak).filter(models.Streak.user_id == user_id).first()
         if not db_streak:
             db_streak = models.Streak(user_id=user_id, current_streak=0, longest_streak=0)

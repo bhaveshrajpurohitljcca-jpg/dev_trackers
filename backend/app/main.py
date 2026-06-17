@@ -379,7 +379,13 @@ def log_work(log_data: schemas.DailyLogCreate, db: Session = Depends(get_db), cu
             # The prompt says "Daily Work Log Deadline (10:00 PM)". Let's allow it but record activity as "late log"
             pass
             
-    db_log = crud.create_daily_log(db, current_user.id, log_data)
+    try:
+        db_log = crud.create_daily_log(db, current_user.id, log_data)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     
     # Map user name back for response schema
     db_log.user_name = current_user.full_name
@@ -511,7 +517,14 @@ def user_log_project_hours(project_id: int, log_data: schemas.ProjectLogCreate, 
     if current_user.role != "admin" and project.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
         
-    db_log = crud.log_project_hours(db, project_id, current_user.id, log_data)
+    try:
+        db_log = crud.log_project_hours(db, project_id, current_user.id, log_data)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     return db_log
 
 @app.put(f"{settings.API_V1_STR}/projects/{{project_id}}", response_model=schemas.ProjectResponse)
