@@ -94,6 +94,7 @@ class DailyLogResponse(DailyLogCreate):
 class ProjectLogCreate(BaseModel):
     hours: float = Field(gt=0, le=24)
     description: str
+    date: Optional[date] = None
 
 class ProjectLogResponse(ProjectLogCreate):
     id: int

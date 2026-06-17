@@ -435,7 +435,7 @@ def log_project_hours(db: Session, project_id: int, user_id: int, log_data: sche
     
     # Also create a DailyLog entry corresponding to this coding log automatically for ease of use
     # Check if there is already a DailyLog for today, if not or if yes, add it to maintain daily log stats
-    today_date = get_ist_date()
+    today_date = log_data.date or get_ist_date()
     daily_log = schemas.DailyLogCreate(
         date=today_date,
         category="Coding",

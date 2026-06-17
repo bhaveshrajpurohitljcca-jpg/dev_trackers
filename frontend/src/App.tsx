@@ -1837,7 +1837,11 @@ export function ProjectDetails() {
 
     setSubmittingLog(true);
     try {
-      await api.logProjectHours(parseInt(project_id), { hours: h, description });
+      await api.logProjectHours(parseInt(project_id), { 
+        hours: h, 
+        description,
+        date: toLocalDateString(new Date())
+      });
       showSuccess('Hours logged and registered on your daily feed!');
       setHours('');
       setDescription('');
