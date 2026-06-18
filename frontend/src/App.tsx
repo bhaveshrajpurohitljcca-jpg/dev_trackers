@@ -313,6 +313,16 @@ const toLocalDateString = (d: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const formatHours = (hoursFloat: number | undefined | null) => {
+  if (hoursFloat === undefined || hoursFloat === null || isNaN(hoursFloat)) return '0 hrs';
+  const h = Math.floor(hoursFloat);
+  const m = Math.round((hoursFloat - h) * 60);
+  if (h === 0 && m === 0) return '0 hrs';
+  if (h === 0) return `${m} mins`;
+  if (m === 0) return `${h} hrs`;
+  return `${h}h ${m}m`;
+};
+
 // ============================================================================
 // COMPONENT: HEATMAP (GITHUB STYLE)
 // ============================================================================
@@ -399,7 +409,7 @@ function HeatmapCalendar({ logs }: { logs: Record<string, number> }) {
                         color: d.hours > 0 ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
                         cursor: 'default'
                       }}
-                      title={`${d.date}: ${d.hours} hours logged`}
+                      title={`${d.date}: ${formatHours(d.hours)} logged`}
                     >
                       {d.dayVal}
                     </div>
@@ -448,7 +458,7 @@ function CategoryChart({ coding, learning }: { coding: number, learning: number 
             <div key={item.label} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                 <span style={{ fontWeight: 600 }}>{item.label}</span>
-                <span style={{ color: 'var(--text-secondary)' }}>{item.value.toFixed(1)} hrs</span>
+                <span style={{ color: 'var(--text-secondary)' }}>{formatHours(item.value)}</span>
               </div>
               <div style={{ width: '100%', height: '10px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden' }}>
                 <div 
@@ -770,8 +780,8 @@ export function UserDashboard() {
             <span className="stat-title">Hours Submitted (Today)</span>
             <div className="stat-icon" style={{ color: 'var(--color-secondary)' }}><Clock size={18} /></div>
           </div>
-          <span className="stat-value">{data?.today_hours || 0} hrs</span>
-          <span className="stat-desc">Coding: {data?.today_coding_hours || 0}h | Learning: {data?.today_learning_hours || 0}h</span>
+          <span className="stat-value">{formatHours(data?.today_hours)}</span>
+          <span className="stat-desc">Coding: {formatHours(data?.today_coding_hours)} | Learning: {formatHours(data?.today_learning_hours)}</span>
         </div>
 
         <div className="glass-card stat-card">
@@ -779,7 +789,7 @@ export function UserDashboard() {
             <span className="stat-title">Total Hours</span>
             <div className="stat-icon" style={{ color: 'var(--color-success)' }}><Clock size={18} /></div>
           </div>
-          <span className="stat-value">{data?.total_hours?.toFixed(1)} hrs</span>
+          <span className="stat-value">{formatHours(data?.total_hours)}</span>
           <span className="stat-desc">Accumulated time</span>
         </div>
 
@@ -789,7 +799,7 @@ export function UserDashboard() {
             <div className="stat-icon" style={{ color: 'var(--color-accent)' }}><Calendar size={18} /></div>
           </div>
           <span className="stat-value" style={{ fontSize: '1.4rem' }}>
-            {data?.weekly_hours.toFixed(1)} / {data?.monthly_hours.toFixed(1)}
+            {formatHours(data?.weekly_hours)} / {formatHours(data?.monthly_hours)}
           </span>
           <span className="stat-desc">Weekly vs Monthly hours</span>
         </div>
@@ -862,7 +872,7 @@ export function UserDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                 <span>Hours Logged (Coding & Learning):</span>
-                <strong>{data?.weekly_work_hours?.toFixed(1)} / 10.0 hrs</strong>
+                <strong>{formatHours(data?.weekly_work_hours)} / 10 hrs</strong>
               </div>
               <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden', margin: '0.25rem 0' }}>
                 <div 
@@ -882,7 +892,7 @@ export function UserDashboard() {
               ) : (
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                   <AlertCircle size={16} style={{ color: 'var(--color-warning)' }} />
-                  <span>Need {(10 - data?.weekly_work_hours).toFixed(1)} more hours to reach the 10hr target.</span>
+                  <span>Need {formatHours(10 - data?.weekly_work_hours)} more to reach the 10hr target.</span>
                 </div>
               )}
             </div>
@@ -1050,7 +1060,7 @@ export function AdminDashboard() {
             <span className="stat-title">Total Team Hours</span>
             <div className="stat-icon" style={{ color: 'var(--color-secondary)' }}><Clock size={18} /></div>
           </div>
-          <span className="stat-value">{data?.total_team_hours.toFixed(1)} hrs</span>
+          <span className="stat-value">{formatHours(data?.total_team_hours)}</span>
           <span className="stat-desc">All developers combined</span>
         </div>
 
@@ -1059,7 +1069,7 @@ export function AdminDashboard() {
             <span className="stat-title">Weekly Team Hours</span>
             <div className="stat-icon" style={{ color: 'var(--color-accent)' }}><TrendingUp size={18} /></div>
           </div>
-          <span className="stat-value">{data?.weekly_team_hours.toFixed(1)} hrs</span>
+          <span className="stat-value">{formatHours(data?.weekly_team_hours)}</span>
           <span className="stat-desc">Current calendar week</span>
         </div>
 
@@ -1107,7 +1117,7 @@ export function AdminDashboard() {
                       </div>
                       <span style={{ fontWeight: 600 }}>{perf.name}</span>
                     </div>
-                    <span style={{ marginLeft: 'auto', color: 'var(--color-primary)', fontWeight: 700 }}>{perf.hours.toFixed(1)} hrs</span>
+                    <span style={{ marginLeft: 'auto', color: 'var(--color-primary)', fontWeight: 700 }}>{formatHours(perf.hours)}</span>
                   </div>
                 ))
               ) : (
@@ -1155,7 +1165,7 @@ export function AdminDashboard() {
                         <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{userProg.full_name}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                            {userProg.weekly_work_hours.toFixed(1)} / 10 hrs
+                            {formatHours(userProg.weekly_work_hours)} / 10 hrs
                           </span>
                           <span className={`badge ${metTarget ? 'badge-active' : 'badge-other'}`} style={{ 
                             fontSize: '0.75rem', 
@@ -1288,14 +1298,7 @@ export function WorkLogs() {
     }
   };
 
-  const formatHours = (hoursFloat: number) => {
-    const h = Math.floor(hoursFloat);
-    const m = Math.round((hoursFloat - h) * 60);
-    if (h === 0 && m === 0) return '0 hrs';
-    if (h === 0) return `${m} mins`;
-    if (m === 0) return `${h} hrs`;
-    return `${h}h ${m}m`;
-  };
+
 
   return (
     <Layout>
@@ -1759,14 +1762,16 @@ export function Projects() {
                 {proj.description || 'No description provided.'}
               </p>
 
-              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Hours Invested</div>
-                  <strong style={{ fontSize: '1.1rem', color: 'var(--color-primary)' }}>{proj.hours_invested.toFixed(1)} hrs</strong>
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Hours Invested</div>
+                    <strong style={{ fontSize: '1.1rem', color: 'var(--color-primary)' }}>{formatHours(proj.hours_invested)}</strong>
+                  </div>
+                  <Link to={`/projects/${proj.id}`} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
+                    Open Details
+                  </Link>
                 </div>
-                <Link to={`/projects/${proj.id}`} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
-                  Open Details
-                </Link>
               </div>
             </div>
           ))}
@@ -1960,7 +1965,7 @@ export function ProjectDetails() {
                   }} />
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ color: 'var(--color-secondary)' }}>{log.hours.toFixed(1)} hrs</strong>
+                      <strong style={{ color: 'var(--color-secondary)' }}>{formatHours(log.hours)}</strong>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         {new Date(log.logged_at).toLocaleString()}
                       </span>
@@ -1984,7 +1989,7 @@ export function ProjectDetails() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1rem' }}>
             <div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Hours Invested</div>
-              <strong style={{ fontSize: '1.75rem', color: 'var(--color-primary)' }}>{project.hours_invested.toFixed(1)} hrs</strong>
+              <strong style={{ fontSize: '1.75rem', color: 'var(--color-primary)' }}>{formatHours(project.hours_invested)}</strong>
             </div>
             
             <div>
@@ -2104,7 +2109,7 @@ export function Leaderboard() {
             <h3 style={{ fontSize: '1.2rem' }}>{topThree[1].full_name}</h3>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{topThree[1].team || 'Developer'}</span>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-primary)', marginTop: '0.5rem' }}>
-              {sortType === 'total' ? topThree[1].total_hours : sortType === 'weekly' ? topThree[1].weekly_hours : topThree[1].monthly_hours} hrs
+              {formatHours(sortType === 'total' ? topThree[1].total_hours : sortType === 'weekly' ? topThree[1].weekly_hours : topThree[1].monthly_hours)}
             </div>
             <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
               <Flame size={14} /> {topThree[1].current_streak} Day Streak
@@ -2121,7 +2126,7 @@ export function Leaderboard() {
             <h3 style={{ fontSize: '1.35rem' }}>{topThree[0].full_name}</h3>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{topThree[0].team || 'Developer'}</span>
             <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-secondary)', marginTop: '0.5rem' }}>
-              {sortType === 'total' ? topThree[0].total_hours : sortType === 'weekly' ? topThree[0].weekly_hours : topThree[0].monthly_hours} hrs
+              {formatHours(sortType === 'total' ? topThree[0].total_hours : sortType === 'weekly' ? topThree[0].weekly_hours : topThree[0].monthly_hours)}
             </div>
             <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
               <Flame size={14} /> {topThree[0].current_streak} Day Streak
@@ -2138,7 +2143,7 @@ export function Leaderboard() {
             <h3 style={{ fontSize: '1.1rem' }}>{topThree[2].full_name}</h3>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{topThree[2].team || 'Developer'}</span>
             <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--color-primary)', marginTop: '0.5rem' }}>
-              {sortType === 'total' ? topThree[2].total_hours : sortType === 'weekly' ? topThree[2].weekly_hours : topThree[2].monthly_hours} hrs
+              {formatHours(sortType === 'total' ? topThree[2].total_hours : sortType === 'weekly' ? topThree[2].weekly_hours : topThree[2].monthly_hours)}
             </div>
             <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
               <Flame size={14} /> {topThree[2].current_streak} Day Streak
@@ -2175,7 +2180,7 @@ export function Leaderboard() {
                       </span>
                     </td>
                     <td style={{ fontWeight: 700, color: 'var(--color-secondary)' }}>
-                      {sortType === 'total' ? row.total_hours.toFixed(1) : sortType === 'weekly' ? row.weekly_hours.toFixed(1) : row.monthly_hours.toFixed(1)} hrs
+                      {formatHours(sortType === 'total' ? row.total_hours : sortType === 'weekly' ? row.weekly_hours : row.monthly_hours)}
                     </td>
                   </tr>
                 ))}
@@ -2308,7 +2313,7 @@ export function Profile() {
               <div className="glass-card" style={{ textAlign: 'center', padding: '1.25rem' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Hours</div>
                 <strong style={{ fontSize: '1.5rem', color: 'var(--color-primary)', display: 'block', marginTop: '0.25rem' }}>
-                  {profile?.total_hours.toFixed(1)}
+                  {formatHours(profile?.total_hours)}
                 </strong>
               </div>
 
@@ -2765,7 +2770,7 @@ export function AdminUsers() {
                   <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '10px', textAlign: 'center' }}>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Total Hours</span>
                     <strong style={{ display: 'block', color: 'var(--color-primary)', fontSize: '1.1rem', marginTop: '0.25rem' }}>
-                      {selectedProfile.total_hours.toFixed(1)}
+                      {formatHours(selectedProfile.total_hours)}
                     </strong>
                   </div>
                   <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '10px', textAlign: 'center' }}>
@@ -3898,7 +3903,7 @@ export function AdminPerformance() {
                           strokeWidth="2.5" 
                           style={{ cursor: 'pointer' }}
                         >
-                          <title>{`${user.full_name}: ${val} hours (${days[i]} ${dates[i]})`}</title>
+                          <title>{`${user.full_name}: ${formatHours(val)} (${days[i]} ${dates[i]})`}</title>
                         </circle>
                       );
                     })}
@@ -4045,7 +4050,7 @@ export function AdminPerformance() {
                                   {user.today_log.category}
                                 </span>
                                 <strong style={{ color: 'var(--text-primary)', fontSize: '0.8rem' }}>
-                                  {user.today_log.hours.toFixed(1)} hrs
+                                  {formatHours(user.today_log.hours)}
                                 </strong>
                               </div>
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
@@ -4094,7 +4099,7 @@ export function AdminPerformance() {
 
                         {/* Average Hours */}
                         <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 600, color: 'var(--color-secondary)' }}>
-                          {user.average_hours_per_day.toFixed(1)} hrs
+                          {formatHours(user.average_hours_per_day)}
                         </td>
 
                         {/* Total Log Entries Count */}
@@ -4104,7 +4109,7 @@ export function AdminPerformance() {
 
                         {/* Total Hours */}
                         <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {user.total_hours.toFixed(1)} hrs
+                          {formatHours(user.total_hours)}
                         </td>
                       </tr>
                     );
