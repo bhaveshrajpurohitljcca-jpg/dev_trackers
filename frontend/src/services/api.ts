@@ -30,6 +30,7 @@ export interface DailyLog {
   date: string;
   category: 'Coding' | 'Learning' | 'Nothing Today';
   hours: number;
+  minutes: number;
   description: string;
   created_at: string;
   user_name?: string;
@@ -63,6 +64,7 @@ export interface ProjectLog {
   project_id: number;
   user_id: number;
   hours: number;
+  minutes: number;
   description: string;
   logged_at: string;
 }
@@ -75,6 +77,10 @@ export interface Project {
   status: 'Active' | 'Completed' | 'Archived';
   start_date: string | null;
   end_date: string | null;
+  github_url?: string | null;
+  host_url?: string | null;
+  hours_invested_hours: number;
+  hours_invested_minutes: number;
   hours_invested: number;
   logs: ProjectLog[];
 }
@@ -91,15 +97,7 @@ export interface LeaderboardUser {
   longest_streak: number;
 }
 
-export interface Achievement {
-  id: number;
-  name: string;
-  description: string;
-  criteria_type: string;
-  criteria_value: string;
-  is_unlocked: boolean;
-  unlocked_at: string | null;
-}
+// Achievements interface removed
 
 export interface SystemSettings {
   id: number;
@@ -121,16 +119,7 @@ export interface EmailLog {
   created_at: string;
 }
 
-export interface Message {
-  id: number;
-  sender_id: number;
-  recipient_id: number;
-  content: string;
-  is_read: boolean;
-  created_at: string;
-  sender_name?: string;
-  recipient_name?: string;
-}
+// Message interface removed
 
 // Request Interceptor Helper
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -352,9 +341,7 @@ export const api = {
     return request<LeaderboardUser[]>('/leaderboard');
   },
 
-  async getAchievements(): Promise<Achievement[]> {
-    return request<Achievement[]>('/achievements');
-  },
+  // Achievements method removed
 
   // Activities Feed
   async getActivities(): Promise<Activity[]> {
@@ -390,35 +377,5 @@ export const api = {
     });
   },
 
-  // Messaging APIs
-  async sendMessage(recipientId: number, content: string): Promise<Message> {
-    return request<Message>('/messages', {
-      method: 'POST',
-      body: JSON.stringify({ recipient_id: recipientId, content }),
-    });
-  },
-
-  async getReceivedMessages(limit: number = 5, skip: number = 0): Promise<Message[]> {
-    return request<Message[]>(`/messages/received?limit=${limit}&skip=${skip}`);
-  },
-
-  async getSentMessages(limit: number = 5, skip: number = 0): Promise<Message[]> {
-    return request<Message[]>(`/messages/sent?limit=${limit}&skip=${skip}`);
-  },
-
-  async deleteMessage(messageId: number): Promise<{ detail: string }> {
-    return request<{ detail: string }>(`/messages/${messageId}`, {
-      method: 'DELETE',
-    });
-  },
-
-  async markMessageRead(messageId: number): Promise<Message> {
-    return request<Message>(`/messages/${messageId}/read`, {
-      method: 'PATCH',
-    });
-  },
-
-  async getUnreadMessageCount(): Promise<{ count: number }> {
-    return request<{ count: number }>('/messages/unread-count');
-  },
+  // Messaging methods removed
 };

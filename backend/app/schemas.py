@@ -1,6 +1,8 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional, Union
+import datetime as dt
 from datetime import datetime, date
+
 
 # Token schemas
 class Token(BaseModel):
@@ -78,7 +80,8 @@ class UserResponse(UserBase):
 class DailyLogCreate(BaseModel):
     date: date
     category: str # Coding, Learning, Research, Other
-    hours: float = Field(ge=0, le=24)
+    hours: int = Field(ge=0, le=24)
+    minutes: int = Field(ge=0, le=59)
     description: str
 
 class DailyLogResponse(DailyLogCreate):
@@ -92,9 +95,10 @@ class DailyLogResponse(DailyLogCreate):
 
 # Project Log schemas
 class ProjectLogCreate(BaseModel):
-    hours: float = Field(gt=0, le=24)
+    hours: int = Field(ge=0, le=24)
+    minutes: int = Field(ge=0, le=59)
     description: str
-    date: Optional[date] = None
+    date: Optional[dt.date] = None
 
 class ProjectLogResponse(ProjectLogCreate):
     id: int
@@ -112,10 +116,14 @@ class ProjectCreate(BaseModel):
     status: str = "Active" # Active, Completed, Archived
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+    github_url: Optional[str] = None
+    host_url: Optional[str] = None
 
 class ProjectResponse(ProjectCreate):
     id: int
     user_id: int
+    hours_invested_hours: int
+    hours_invested_minutes: int
     hours_invested: float
     logs: List[ProjectLogResponse] = []
 
@@ -169,27 +177,7 @@ class StreakResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# Achievement schemas
-class AchievementResponse(BaseModel):
-    id: int
-    name: str
-    description: str
-    criteria_type: str
-    criteria_value: str
-
-    class Config:
-        from_attributes = True
-
-# User Achievement schemas
-class UserAchievementResponse(BaseModel):
-    id: int
-    user_id: int
-    achievement_id: int
-    unlocked_at: datetime
-    achievement: AchievementResponse
-
-    class Config:
-        from_attributes = True
+# Achievements schemas removed
 
 # Email Log schemas
 class EmailLogResponse(BaseModel):
@@ -216,21 +204,4 @@ class ActivityLogResponse(BaseModel):
         from_attributes = True
 
 
-# Message schemas
-class MessageCreate(BaseModel):
-    recipient_id: int
-    content: str
-
-
-class MessageResponse(BaseModel):
-    id: int
-    sender_id: int
-    recipient_id: int
-    content: str
-    is_read: bool
-    created_at: datetime
-    sender_name: Optional[str] = None
-    recipient_name: Optional[str] = None
-
-    class Config:
-        from_attributes = True
+# Message schemas removed

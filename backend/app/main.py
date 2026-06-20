@@ -17,14 +17,14 @@ from app import models, schemas, crud
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-# Run database migrations for SMTP settings dynamically only if columns are missing
+# Run database migrations dynamically
 from sqlalchemy import inspect, text
 inspector = inspect(engine)
 try:
+    # Migrate SMTP Settings
     if "settings" in inspector.get_table_names():
         columns = [col["name"] for col in inspector.get_columns("settings")]
         missing_columns = [col for col in ["smtp_host", "smtp_port", "smtp_user", "smtp_password"] if col not in columns]
-        
         if missing_columns:
             db_mig = next(get_db())
             try:
@@ -50,28 +50,322 @@ try:
                         db_mig.execute(text(f"ALTER TABLE settings ADD COLUMN IF NOT EXISTS {col_name} {col_type} DEFAULT {col_default}"))
                     db_mig.commit()
             except Exception as e:
-                print(f"Migration error: {e}")
+                print(f"SMTP Migration error: {e}")
                 db_mig.rollback()
             finally:
                 db_mig.close()
-                
-    if "messages" in inspector.get_table_names():
-        columns = [col["name"] for col in inspector.get_columns("messages")]
-        if "is_read" not in columns:
+
+    # Drop Messages and Achievements tables if they exist
+    db_mig = next(get_db())
+    try:
+        dialect = db_mig.bind.dialect.name
+        tables_to_drop = ["messages", "user_achievements", "achievements"]
+        for table in tables_to_drop:
+            if table in inspector.get_table_names():
+                if dialect == "sqlite":
+                    db_mig.execute(text(f"DROP TABLE IF EXISTS {table}"))
+                else:
+                    db_mig.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+                db_mig.commit()
+                print(f"Dropped table {table}.")
+    except Exception as e:
+        print(f"Error dropping tables: {e}")
+        db_mig.rollback()
+    finally:
+        db_mig.close()
+
+    # Migrate daily_logs table (Float hours -> Int hours and Int minutes)
+    if "daily_logs" in inspector.get_table_names():
+        columns_info = inspector.get_columns("daily_logs")
+        columns = [col["name"] for col in columns_info]
+        hours_col = next((col for col in columns_info if col["name"] == "hours"), None)
+        is_hours_integer = False
+        if hours_col is not None:
+            type_str = str(hours_col["type"]).lower()
+            if "int" in type_str:
+                is_hours_integer = True
+
+        if "minutes" not in columns or not is_hours_integer:
             db_mig = next(get_db())
             try:
                 dialect = db_mig.bind.dialect.name
                 if dialect == "sqlite":
-                    db_mig.execute(text("ALTER TABLE messages ADD COLUMN is_read BOOLEAN DEFAULT 0"))
+                    print("Migrating daily_logs table to hours and minutes (SQLite)...")
+                    # Fetch all existing records
+                    existing_records = db_mig.execute(text("SELECT id, user_id, date, category, hours, description, created_at FROM daily_logs")).all()
+                    
+                    # Drop existing table and recreate with correct column types
+                    db_mig.execute(text("DROP TABLE IF EXISTS daily_logs"))
+                    db_mig.commit()
+                    
+                    db_mig.execute(text("""
+                        CREATE TABLE daily_logs (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER NOT NULL,
+                            date DATE NOT NULL,
+                            category VARCHAR NOT NULL,
+                            hours INTEGER NOT NULL,
+                            minutes INTEGER NOT NULL,
+                            description TEXT NOT NULL,
+                            created_at DATETIME,
+                            FOREIGN KEY(user_id) REFERENCES users(id)
+                        )
+                    """))
+                    db_mig.execute(text("CREATE INDEX ix_daily_logs_id ON daily_logs (id)"))
+                    db_mig.commit()
+                    
+                    for r in existing_records:
+                        h_float = float(r[4]) if r[4] is not None else 0.0
+                        h_int = int(h_float)
+                        m_int = int(round((h_float - h_int) * 60))
+                        if m_int >= 60:
+                            h_int += 1
+                            m_int = 0
+                        db_mig.execute(text("""
+                            INSERT INTO daily_logs (id, user_id, date, category, hours, minutes, description, created_at)
+                            VALUES (:id, :user_id, :date, :category, :hours, :minutes, :description, :created_at)
+                        """), {
+                            "id": r[0],
+                            "user_id": r[1],
+                            "date": r[2],
+                            "category": r[3],
+                            "hours": h_int,
+                            "minutes": m_int,
+                            "description": r[5],
+                            "created_at": r[6]
+                        })
+                    db_mig.commit()
+                    print("daily_logs table migrated successfully (SQLite).")
                 else:
-                    db_mig.execute(text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE"))
-                db_mig.commit()
-                print("Added column is_read to messages table.")
+                    print("Migrating daily_logs table to hours and minutes (PostgreSQL)...")
+                    if "minutes" not in columns:
+                        db_mig.execute(text("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS minutes INTEGER DEFAULT 0"))
+                        db_mig.commit()
+                    
+                    if not is_hours_integer:
+                        db_mig.execute(text("""
+                            UPDATE daily_logs 
+                            SET minutes = CASE 
+                                WHEN ROUND((hours::numeric - TRUNC(hours::numeric)) * 60) >= 60 THEN 0 
+                                ELSE ROUND((hours::numeric - TRUNC(hours::numeric)) * 60) 
+                              END,
+                              hours = CASE 
+                                WHEN ROUND((hours::numeric - TRUNC(hours::numeric)) * 60) >= 60 THEN TRUNC(hours::numeric) + 1 
+                                ELSE TRUNC(hours::numeric) 
+                              END
+                        """))
+                        db_mig.commit()
+                        
+                        db_mig.execute(text("ALTER TABLE daily_logs ALTER COLUMN hours TYPE INTEGER USING hours::integer"))
+                        db_mig.commit()
+                    print("daily_logs table migrated successfully (PostgreSQL).")
             except Exception as e:
-                print(f"Messages Migration error: {e}")
+                print(f"Error migrating daily_logs: {e}")
                 db_mig.rollback()
             finally:
                 db_mig.close()
+
+    # Migrate project_logs table (Float hours -> Int hours and Int minutes)
+    if "project_logs" in inspector.get_table_names():
+        columns_info = inspector.get_columns("project_logs")
+        columns = [col["name"] for col in columns_info]
+        hours_col = next((col for col in columns_info if col["name"] == "hours"), None)
+        is_hours_integer = False
+        if hours_col is not None:
+            type_str = str(hours_col["type"]).lower()
+            if "int" in type_str:
+                is_hours_integer = True
+
+        if "minutes" not in columns or not is_hours_integer:
+            db_mig = next(get_db())
+            try:
+                dialect = db_mig.bind.dialect.name
+                if dialect == "sqlite":
+                    print("Migrating project_logs table to hours and minutes (SQLite)...")
+                    existing_records = db_mig.execute(text("SELECT id, project_id, user_id, hours, description, logged_at FROM project_logs")).all()
+                    
+                    db_mig.execute(text("DROP TABLE IF EXISTS project_logs"))
+                    db_mig.commit()
+                    
+                    db_mig.execute(text("""
+                        CREATE TABLE project_logs (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            project_id INTEGER NOT NULL,
+                            user_id INTEGER NOT NULL,
+                            hours INTEGER NOT NULL,
+                            minutes INTEGER NOT NULL,
+                            description TEXT NOT NULL,
+                            logged_at DATETIME,
+                            FOREIGN KEY(project_id) REFERENCES projects(id),
+                            FOREIGN KEY(user_id) REFERENCES users(id)
+                        )
+                    """))
+                    db_mig.execute(text("CREATE INDEX ix_project_logs_id ON project_logs (id)"))
+                    db_mig.commit()
+                    
+                    for r in existing_records:
+                        h_float = float(r[3]) if r[3] is not None else 0.0
+                        h_int = int(h_float)
+                        m_int = int(round((h_float - h_int) * 60))
+                        if m_int >= 60:
+                            h_int += 1
+                            m_int = 0
+                        db_mig.execute(text("""
+                            INSERT INTO project_logs (id, project_id, user_id, hours, minutes, description, logged_at)
+                            VALUES (:id, :project_id, :user_id, :hours, :minutes, :description, :logged_at)
+                        """), {
+                            "id": r[0],
+                            "project_id": r[1],
+                            "user_id": r[2],
+                            "hours": h_int,
+                            "minutes": m_int,
+                            "description": r[4],
+                            "logged_at": r[5]
+                        })
+                    db_mig.commit()
+                    print("project_logs table migrated successfully (SQLite).")
+                else:
+                    print("Migrating project_logs table to hours and minutes (PostgreSQL)...")
+                    if "minutes" not in columns:
+                        db_mig.execute(text("ALTER TABLE project_logs ADD COLUMN IF NOT EXISTS minutes INTEGER DEFAULT 0"))
+                        db_mig.commit()
+                    
+                    if not is_hours_integer:
+                        db_mig.execute(text("""
+                            UPDATE project_logs 
+                            SET minutes = CASE 
+                                WHEN ROUND((hours::numeric - TRUNC(hours::numeric)) * 60) >= 60 THEN 0 
+                                ELSE ROUND((hours::numeric - TRUNC(hours::numeric)) * 60) 
+                              END,
+                              hours = CASE 
+                                WHEN ROUND((hours::numeric - TRUNC(hours::numeric)) * 60) >= 60 THEN TRUNC(hours::numeric) + 1 
+                                ELSE TRUNC(hours::numeric) 
+                              END
+                        """))
+                        db_mig.commit()
+                        
+                        db_mig.execute(text("ALTER TABLE project_logs ALTER COLUMN hours TYPE INTEGER USING hours::integer"))
+                        db_mig.commit()
+                    print("project_logs table migrated successfully (PostgreSQL).")
+            except Exception as e:
+                print(f"Error migrating project_logs: {e}")
+                db_mig.rollback()
+            finally:
+                db_mig.close()
+
+    # Migrate projects table (Float hours_invested -> Int hours_invested_hours and Int hours_invested_minutes)
+    if "projects" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("projects")]
+        if "hours_invested_hours" not in columns or "hours_invested" in columns:
+            db_mig = next(get_db())
+            try:
+                dialect = db_mig.bind.dialect.name
+                if dialect == "sqlite":
+                    print("Migrating projects table to hours and minutes (SQLite)...")
+                    existing_records = db_mig.execute(text("SELECT id, user_id, name, description, status, start_date, end_date, hours_invested FROM projects")).all()
+                    
+                    db_mig.execute(text("DROP TABLE IF EXISTS projects"))
+                    db_mig.commit()
+                    
+                    db_mig.execute(text("""
+                        CREATE TABLE projects (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER NOT NULL,
+                            name VARCHAR NOT NULL,
+                            description TEXT,
+                            status VARCHAR NOT NULL,
+                            start_date DATE,
+                            end_date DATE,
+                            github_url VARCHAR,
+                            host_url VARCHAR,
+                            hours_invested_hours INTEGER NOT NULL DEFAULT 0,
+                            hours_invested_minutes INTEGER NOT NULL DEFAULT 0,
+                            FOREIGN KEY(user_id) REFERENCES users(id)
+                        )
+                    """))
+                    db_mig.execute(text("CREATE INDEX ix_projects_id ON projects (id)"))
+                    db_mig.commit()
+                    
+                    for r in existing_records:
+                        h_float = float(r[7]) if r[7] is not None else 0.0
+                        h_int = int(h_float)
+                        m_int = int(round((h_float - h_int) * 60))
+                        if m_int >= 60:
+                            h_int += 1
+                            m_int = 0
+                        db_mig.execute(text("""
+                            INSERT INTO projects (id, user_id, name, description, status, start_date, end_date, hours_invested_hours, hours_invested_minutes)
+                            VALUES (:id, :user_id, :name, :description, :status, :start_date, :end_date, :hours_invested_hours, :hours_invested_minutes)
+                        """), {
+                            "id": r[0],
+                            "user_id": r[1],
+                            "name": r[2],
+                            "description": r[3],
+                            "status": r[4],
+                            "start_date": r[5],
+                            "end_date": r[6],
+                            "hours_invested_hours": h_int,
+                            "hours_invested_minutes": m_int
+                        })
+                    db_mig.commit()
+                    print("projects table migrated successfully (SQLite).")
+                else:
+                    print("Migrating projects table to hours and minutes (PostgreSQL)...")
+                    if "hours_invested_hours" not in columns:
+                        db_mig.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS hours_invested_hours INTEGER DEFAULT 0"))
+                    if "hours_invested_minutes" not in columns:
+                        db_mig.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS hours_invested_minutes INTEGER DEFAULT 0"))
+                    db_mig.commit()
+                    
+                    if "hours_invested" in columns:
+                        db_mig.execute(text("""
+                            UPDATE projects 
+                            SET hours_invested_minutes = CASE 
+                                WHEN ROUND((hours_invested::numeric - TRUNC(hours_invested::numeric)) * 60) >= 60 THEN 0 
+                                ELSE ROUND((hours_invested::numeric - TRUNC(hours_invested::numeric)) * 60) 
+                              END,
+                              hours_invested_hours = CASE 
+                                WHEN ROUND((hours_invested::numeric - TRUNC(hours_invested::numeric)) * 60) >= 60 THEN TRUNC(hours_invested::numeric) + 1 
+                                ELSE TRUNC(hours_invested::numeric) 
+                              END
+                        """))
+                        db_mig.commit()
+                        
+                        db_mig.execute(text("ALTER TABLE projects DROP COLUMN IF EXISTS hours_invested"))
+                        db_mig.commit()
+                    print("projects table migrated successfully (PostgreSQL).")
+            except Exception as e:
+                print(f"Error migrating projects: {e}")
+                db_mig.rollback()
+            finally:
+                db_mig.close()
+
+    # Migrate projects table to add github_url and host_url columns if they don't exist
+    if "projects" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("projects")]
+        db_mig = next(get_db())
+        try:
+            dialect = db_mig.bind.dialect.name
+            if "github_url" not in columns:
+                if dialect == "sqlite":
+                    db_mig.execute(text("ALTER TABLE projects ADD COLUMN github_url VARCHAR"))
+                else:
+                    db_mig.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_url VARCHAR"))
+                db_mig.commit()
+                print("Added column github_url to projects table.")
+            if "host_url" not in columns:
+                if dialect == "sqlite":
+                    db_mig.execute(text("ALTER TABLE projects ADD COLUMN host_url VARCHAR"))
+                else:
+                    db_mig.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS host_url VARCHAR"))
+                db_mig.commit()
+                print("Added column host_url to projects table.")
+        except Exception as e:
+            print(f"Error migrating projects github/host columns: {e}")
+            db_mig.rollback()
+        finally:
+            db_mig.close()
+                
 except Exception as e:
     print(f"Inspector migration error: {e}")
 
@@ -255,12 +549,13 @@ def admin_get_user_profile(user_id: int, db: Session = Depends(get_db), current_
         raise HTTPException(status_code=404, detail="User not found")
     crud.verify_and_reset_expired_streak(db, user_id)
         
-    total_hours = db.query(func.sum(models.DailyLog.hours)).filter(models.DailyLog.user_id == user_id).scalar() or 0.0
+    total_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(models.DailyLog.user_id == user_id).scalar() or 0
+    total_hours = total_minutes / 60.0
     # Current rank calculation
     leaderboard = db.query(
         models.User.id,
-        func.coalesce(func.sum(models.DailyLog.hours), 0.0).label("total_hours")
-    ).outerjoin(models.DailyLog).filter(models.User.role == "user").group_by(models.User.id).order_by(func.coalesce(func.sum(models.DailyLog.hours), 0.0).desc()).all()
+        func.coalesce(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes), 0).label("total_minutes")
+    ).outerjoin(models.DailyLog).filter(models.User.role == "user").group_by(models.User.id).order_by(func.coalesce(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes), 0).desc()).all()
     
     rank = 0
     for idx, row in enumerate(leaderboard):
@@ -291,7 +586,7 @@ def admin_get_user_profile(user_id: int, db: Session = Depends(get_db), current_
         "assigned_technologies": assigned_techs,
         "completed_topics_count": len(user.completed_topics),
         "projects_count": len(user.projects),
-        "achievements": [ua.achievement for ua in user.achievements],
+        "achievements": [],
         "recent_logs": db.query(models.DailyLog).filter(models.DailyLog.user_id == user_id).order_by(models.DailyLog.date.desc()).limit(10).all()
     }
 
@@ -583,29 +878,29 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
     # Bulk query total hours
     total_hours_q = db.query(
         models.DailyLog.user_id, 
-        func.sum(models.DailyLog.hours)
+        func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)
     ).filter(models.DailyLog.user_id.in_(user_ids)).group_by(models.DailyLog.user_id).all() if user_ids else []
-    total_hours_map = {user_id: hours or 0.0 for user_id, hours in total_hours_q}
+    total_hours_map = {user_id: (minutes or 0) / 60.0 for user_id, minutes in total_hours_q}
     
     # Bulk query weekly hours
     weekly_hours_q = db.query(
         models.DailyLog.user_id, 
-        func.sum(models.DailyLog.hours)
+        func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)
     ).filter(
         models.DailyLog.user_id.in_(user_ids),
         models.DailyLog.date >= start_of_week
     ).group_by(models.DailyLog.user_id).all() if user_ids else []
-    weekly_hours_map = {user_id: hours or 0.0 for user_id, hours in weekly_hours_q}
+    weekly_hours_map = {user_id: (minutes or 0) / 60.0 for user_id, minutes in weekly_hours_q}
     
     # Bulk query monthly hours
     monthly_hours_q = db.query(
         models.DailyLog.user_id, 
-        func.sum(models.DailyLog.hours)
+        func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)
     ).filter(
         models.DailyLog.user_id.in_(user_ids),
         models.DailyLog.date >= start_of_month
     ).group_by(models.DailyLog.user_id).all() if user_ids else []
-    monthly_hours_map = {user_id: hours or 0.0 for user_id, hours in monthly_hours_q}
+    monthly_hours_map = {user_id: (minutes or 0) / 60.0 for user_id, minutes in monthly_hours_q}
 
     # Bulk query streaks
     streaks = db.query(models.Streak).filter(models.Streak.user_id.in_(user_ids)).all() if user_ids else []
@@ -631,9 +926,9 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
             "full_name": user.full_name,
             "username": user.username,
             "team": user.team,
-            "total_hours": round(total_hours_map.get(user.id, 0.0), 1),
-            "weekly_hours": round(weekly_hours_map.get(user.id, 0.0), 1),
-            "monthly_hours": round(monthly_hours_map.get(user.id, 0.0), 1),
+            "total_hours": round(total_hours_map.get(user.id, 0.0), 4),
+            "weekly_hours": round(weekly_hours_map.get(user.id, 0.0), 4),
+            "monthly_hours": round(monthly_hours_map.get(user.id, 0.0), 4),
             "current_streak": u_streak.current_streak if u_streak else 0,
             "longest_streak": u_streak.longest_streak if u_streak else 0
         })
@@ -641,47 +936,7 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
     leaderboard_data.sort(key=lambda x: x["total_hours"], reverse=True)
     return leaderboard_data
 
-@app.get(f"{settings.API_V1_STR}/achievements")
-def get_user_achievements(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    achievements = db.query(models.Achievement).all()
-    unlocked_ids = [ua.achievement_id for ua in current_user.achievements]
-    
-    # Map primary/secondary teams to technologies they are responsible for
-    allowed_techs = []
-    user_teams = []
-    if current_user.primary_team:
-        user_teams.append(current_user.primary_team.lower())
-    if current_user.secondary_team:
-        user_teams.append(current_user.secondary_team.lower())
-        
-    for team in user_teams:
-        if "front" in team:
-            allowed_techs.extend(["html", "css", "javascript", "react", "typescript"])
-        if "back" in team:
-            allowed_techs.extend(["python", "fastapi"])
-        if "data" in team or "db" in team or "sql" in team or "postgre" in team:
-            allowed_techs.extend(["sql", "postgresql"])
-
-    list_data = []
-    for ach in achievements:
-        # Filter completed_tech achievements based on team mapping
-        if ach.criteria_type == "completed_tech":
-            tech_name = ach.criteria_value.lower()
-            # If the current user is not admin, they should only see the achievements of their team's technologies.
-            if allowed_techs and tech_name not in allowed_techs and current_user.role != "admin":
-                continue
-                
-        unlocked_rec = next((ua for ua in current_user.achievements if ua.achievement_id == ach.id), None)
-        list_data.append({
-            "id": ach.id,
-            "name": ach.name,
-            "description": ach.description,
-            "criteria_type": ach.criteria_type,
-            "criteria_value": ach.criteria_value,
-            "is_unlocked": ach.id in unlocked_ids,
-            "unlocked_at": unlocked_rec.unlocked_at if unlocked_rec else None
-        })
-    return list_data
+# Achievements endpoint removed
 
 # ==========================================
 # ACTIVITIES FEED
@@ -706,39 +961,51 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
     start_of_month = today.replace(day=1)
     
     # Hours calculation
-    total_hours = db.query(func.sum(models.DailyLog.hours)).filter(models.DailyLog.user_id == user_id).scalar() or 0.0
-    weekly_hours = db.query(func.sum(models.DailyLog.hours)).filter(
+    total_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(models.DailyLog.user_id == user_id).scalar() or 0
+    total_hours = total_minutes / 60.0
+    
+    weekly_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
         models.DailyLog.user_id == user_id,
         models.DailyLog.date >= start_of_week
-    ).scalar() or 0.0
-    monthly_hours = db.query(func.sum(models.DailyLog.hours)).filter(
+    ).scalar() or 0
+    weekly_hours = weekly_minutes / 60.0
+    
+    monthly_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
         models.DailyLog.user_id == user_id,
         models.DailyLog.date >= start_of_month
-    ).scalar() or 0.0
+    ).scalar() or 0
+    monthly_hours = monthly_minutes / 60.0
     
     # Category hours
-    coding_hours = db.query(func.sum(models.DailyLog.hours)).filter(
+    coding_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
         models.DailyLog.user_id == user_id,
         models.DailyLog.category == "Coding"
-    ).scalar() or 0.0
-    learning_hours = db.query(func.sum(models.DailyLog.hours)).filter(
+    ).scalar() or 0
+    coding_hours = coding_minutes / 60.0
+    
+    learning_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
         models.DailyLog.user_id == user_id,
         models.DailyLog.category == "Learning"
-    ).scalar() or 0.0
-    research_hours = db.query(func.sum(models.DailyLog.hours)).filter(
+    ).scalar() or 0
+    learning_hours = learning_minutes / 60.0
+    
+    research_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
         models.DailyLog.user_id == user_id,
         models.DailyLog.category == "Research"
-    ).scalar() or 0.0
-    other_hours = db.query(func.sum(models.DailyLog.hours)).filter(
+    ).scalar() or 0
+    research_hours = research_minutes / 60.0
+    
+    other_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
         models.DailyLog.user_id == user_id,
         models.DailyLog.category == "Other"
-    ).scalar() or 0.0
+    ).scalar() or 0
+    other_hours = other_minutes / 60.0
     
     # Rank calculation
     leaderboard = db.query(
         models.User.id,
-        func.coalesce(func.sum(models.DailyLog.hours), 0.0).label("total_hours")
-    ).outerjoin(models.DailyLog).filter(models.User.role == "user").group_by(models.User.id).order_by(func.coalesce(func.sum(models.DailyLog.hours), 0.0).desc()).all()
+        func.coalesce(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes), 0).label("total_minutes")
+    ).outerjoin(models.DailyLog).filter(models.User.role == "user").group_by(models.User.id).order_by(func.coalesce(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes), 0).desc()).all()
     
     rank = 99
     for idx, row in enumerate(leaderboard):
@@ -756,9 +1023,9 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
         
     progress_percentage = (completed_topics / total_assigned_topics * 100) if total_assigned_topics > 0 else 0.0
     
-    # Recent Activities (user-specific + global milestone achievements)
+    # Recent Activities (user-specific)
     recent_activities = db.query(models.ActivityLog).filter(
-        (models.ActivityLog.user_id == user_id) | (models.ActivityLog.activity_type == "achievement_unlocked")
+        models.ActivityLog.user_id == user_id
     ).order_by(models.ActivityLog.created_at.desc()).limit(5).all()
     
     # Upcoming deadline
@@ -772,36 +1039,36 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
     ).count() > 0
     
     # Contribution Heatmap Data (last 30 days)
-    # We will return count of logs per date in the last 30 days
     heatmap_start = today - timedelta(days=30)
     heatmap_logs = db.query(
         models.DailyLog.date,
-        func.sum(models.DailyLog.hours).label("hours")
+        func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes).label("minutes")
     ).filter(
         models.DailyLog.user_id == user_id,
         models.DailyLog.date >= heatmap_start
     ).group_by(models.DailyLog.date).all()
     
-    heatmap_data = {str(hl.date): round(hl.hours, 1) for hl in heatmap_logs}
+    heatmap_data = {str(hl.date): round(hl.minutes / 60.0, 4) for hl in heatmap_logs}
 
     # Coding + Learning hours this week
-    weekly_work_hours = db.query(func.sum(models.DailyLog.hours)).filter(
+    weekly_work_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
         models.DailyLog.user_id == user_id,
         models.DailyLog.date >= start_of_week,
         models.DailyLog.category.in_(["Coding", "Learning"])
-    ).scalar() or 0.0
+    ).scalar() or 0
+    weekly_work_hours = weekly_work_minutes / 60.0
 
     return {
         "full_name": current_user.full_name,
         "current_streak": current_user.streak.current_streak if current_user.streak else 0,
         "longest_streak": current_user.streak.longest_streak if current_user.streak else 0,
-        "total_hours": round(total_hours, 1),
-        "weekly_hours": round(weekly_hours, 1),
-        "monthly_hours": round(monthly_hours, 1),
-        "coding_hours": round(coding_hours, 1),
-        "learning_hours": round(learning_hours, 1),
-        "research_hours": round(research_hours, 1),
-        "other_hours": round(other_hours, 1),
+        "total_hours": round(total_hours, 4),
+        "weekly_hours": round(weekly_hours, 4),
+        "monthly_hours": round(monthly_hours, 4),
+        "coding_hours": round(coding_hours, 4),
+        "learning_hours": round(learning_hours, 4),
+        "research_hours": round(research_hours, 4),
+        "other_hours": round(other_hours, 4),
         "completed_topics": completed_topics,
         "progress_percentage": round(progress_percentage, 1),
         "rank": rank,
@@ -809,7 +1076,7 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
         "deadline_time": deadline_time,
         "recent_activities": recent_activities,
         "heatmap": heatmap_data,
-        "weekly_work_hours": round(weekly_work_hours, 1)
+        "weekly_work_hours": round(weekly_work_hours, 4)
     }
 
 # ==========================================
@@ -838,18 +1105,21 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
     submitted_users = [u.full_name for u in team_members if u.id in submitted_user_ids]
     
     # Total Hours
-    total_hours = db.query(func.sum(models.DailyLog.hours)).scalar() or 0.0
-    weekly_team_hours = db.query(func.sum(models.DailyLog.hours)).filter(models.DailyLog.date >= start_of_week).scalar() or 0.0
-    monthly_team_hours = db.query(func.sum(models.DailyLog.hours)).filter(models.DailyLog.date >= start_of_month).scalar() or 0.0
+    total_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).scalar() or 0
+    total_hours = total_minutes / 60.0
+    weekly_team_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(models.DailyLog.date >= start_of_week).scalar() or 0
+    weekly_team_hours = weekly_team_minutes / 60.0
+    monthly_team_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(models.DailyLog.date >= start_of_month).scalar() or 0
+    monthly_team_hours = monthly_team_minutes / 60.0
     
     # Performers & streaks
     # Top 3 Performers
     top_performers = db.query(
         models.User.full_name,
-        func.coalesce(func.sum(models.DailyLog.hours), 0.0).label("hours")
-    ).outerjoin(models.DailyLog).filter(models.User.role == "user").group_by(models.User.id).order_by(func.coalesce(func.sum(models.DailyLog.hours), 0.0).desc()).limit(3).all()
+        func.coalesce(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes), 0).label("minutes")
+    ).outerjoin(models.DailyLog).filter(models.User.role == "user").group_by(models.User.id).order_by(func.coalesce(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes), 0).desc()).limit(3).all()
     
-    top_performers_list = [{"name": tp[0], "hours": round(tp[1], 1)} for tp in top_performers]
+    top_performers_list = [{"name": tp[0], "hours": round(tp[1] / 60.0, 4)} for tp in top_performers]
     
     # Longest Current Streak
     longest_current_streak_user = db.query(
@@ -880,14 +1150,14 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
     user_ids = [u.id for u in team_members]
     weekly_logs_q = db.query(
         models.DailyLog.user_id,
-        func.sum(models.DailyLog.hours)
+        func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)
     ).filter(
         models.DailyLog.user_id.in_(user_ids),
         models.DailyLog.date >= start_of_week,
         models.DailyLog.category.in_(["Coding", "Learning"])
     ).group_by(models.DailyLog.user_id).all() if user_ids else []
     
-    weekly_work_map = {user_id: hours or 0.0 for user_id, hours in weekly_logs_q}
+    weekly_work_map = {user_id: (minutes or 0) / 60.0 for user_id, minutes in weekly_logs_q}
     
     user_weekly_progress = []
     for user in team_members:
@@ -895,7 +1165,7 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
             "user_id": user.id,
             "full_name": user.full_name,
             "username": user.username,
-            "weekly_work_hours": round(weekly_work_map.get(user.id, 0.0), 1)
+            "weekly_work_hours": round(weekly_work_map.get(user.id, 0.0), 4)
         })
 
     return {
@@ -905,9 +1175,9 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
         "today_missing_logs": missing_count,
         "today_missing_names": missing_users,
         "today_submitted_names": submitted_users,
-        "total_team_hours": round(total_hours, 1),
-        "weekly_team_hours": round(weekly_team_hours, 1),
-        "monthly_team_hours": round(monthly_team_hours, 1),
+        "total_team_hours": round(total_hours, 4),
+        "weekly_team_hours": round(weekly_team_hours, 4),
+        "monthly_team_hours": round(monthly_team_hours, 4),
         "top_performers": top_performers_list,
         "longest_streak_value": longest_streak_val,
         "longest_streak_name": longest_streak_name,
@@ -952,18 +1222,18 @@ def get_admin_user_performance(db: Session = Depends(get_db), current_admin: mod
     user_weekly_hours = {u.id: {d: 0.0 for d in week_dates} for u in team_members}
     for log in weekly_logs:
         if log.user_id in user_weekly_hours and log.date in user_weekly_hours[log.user_id]:
-            user_weekly_hours[log.user_id][log.date] = log.hours
+            user_weekly_hours[log.user_id][log.date] = log.hours + log.minutes / 60.0
             
     # Query all-time stats: total hours, total logs count
     stats_query = db.query(
         models.DailyLog.user_id,
-        func.sum(models.DailyLog.hours).label("total_hours"),
+        func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes).label("total_minutes"),
         func.count(models.DailyLog.id).label("total_logs")
     ).filter(models.DailyLog.user_id.in_(user_ids)).group_by(models.DailyLog.user_id).all() if user_ids else []
     
     stats_map = {
-        user_id: {"total_hours": total_hours or 0.0, "total_logs": total_logs or 0} 
-        for user_id, total_hours, total_logs in stats_query
+        user_id: {"total_hours": (total_minutes or 0) / 60.0, "total_logs": total_logs or 0} 
+        for user_id, total_minutes, total_logs in stats_query
     }
     
     users_performance = []
@@ -971,7 +1241,7 @@ def get_admin_user_performance(db: Session = Depends(get_db), current_admin: mod
         user_stats = stats_map.get(user.id, {"total_hours": 0.0, "total_logs": 0})
         total_hours = user_stats["total_hours"]
         total_logs = user_stats["total_logs"]
-        avg_hours = round(total_hours / total_logs, 1) if total_logs > 0 else 0.0
+        avg_hours = total_hours / total_logs if total_logs > 0 else 0.0
         
         # Today's log details
         today_log = today_logs_map.get(user.id)
@@ -979,13 +1249,14 @@ def get_admin_user_performance(db: Session = Depends(get_db), current_admin: mod
         if today_log:
             today_log_details = {
                 "hours": today_log.hours,
+                "minutes": today_log.minutes,
                 "category": today_log.category,
                 "description": today_log.description
             }
             
         # Compile weekly daily hours array (Mon - Sun)
         weekly_daily_hours = [
-            round(user_weekly_hours[user.id][d], 1) for d in week_dates
+            round(user_weekly_hours[user.id][d], 4) for d in week_dates
         ]
         
         # Calculate Technology Progress
@@ -997,15 +1268,15 @@ def get_admin_user_performance(db: Session = Depends(get_db), current_admin: mod
                 tech_topic_ids = {t.id for t in tech.topics}
                 if tech_topic_ids.issubset(completed_topics_ids):
                     completed_techs_list.append(tech.name)
-
+ 
         users_performance.append({
             "user_id": user.id,
             "full_name": user.full_name,
             "username": user.username,
             "has_logged_today": today_log is not None,
             "today_log": today_log_details,
-            "average_hours_per_day": avg_hours,
-            "total_hours": round(total_hours, 1),
+            "average_hours_per_day": round(avg_hours, 4),
+            "total_hours": round(total_hours, 4),
             "total_logs_count": total_logs,
             "weekly_hours": weekly_daily_hours,
             "total_assigned_techs": len(user.assigned_technologies),
@@ -1231,81 +1502,4 @@ def trigger_broadcast_email(
     }
 
 
-# ==========================================
-# MESSAGING ROUTERS
-# ==========================================
-
-@app.get(f"{settings.API_V1_STR}/messages/unread-count")
-def get_unread_messages_count(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    count = crud.get_unread_messages_count(db, user_id=current_user.id)
-    return {"count": count}
-
-
-@app.get(f"{settings.API_V1_STR}/messages/received", response_model=List[schemas.MessageResponse])
-def get_received_messages(
-    limit: int = 5,
-    skip: int = 0,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    return crud.get_received_messages(db, user_id=current_user.id, limit=limit, skip=skip)
-
-
-@app.get(f"{settings.API_V1_STR}/messages/sent", response_model=List[schemas.MessageResponse])
-def get_sent_messages(
-    limit: int = 5,
-    skip: int = 0,
-    db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
-):
-    return crud.get_sent_messages(db, admin_id=current_admin.id, limit=limit, skip=skip)
-
-
-@app.post(f"{settings.API_V1_STR}/messages", response_model=schemas.MessageResponse)
-def send_message(
-    message_data: schemas.MessageCreate,
-    db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
-):
-    # Check if recipient exists
-    recipient = crud.get_user(db, message_data.recipient_id)
-    if not recipient:
-        raise HTTPException(status_code=404, detail="Recipient user not found")
-    
-    db_msg = crud.create_message(db, sender_id=current_admin.id, message=message_data)
-    
-    # Log Activity
-    crud.log_activity(
-        db, user_id=current_admin.id, user_name=current_admin.full_name,
-        activity_type="send_message",
-        detail=f"Sent message to {recipient.full_name}: {message_data.content[:50]}"
-    )
-    db.commit()
-    return db_msg
-
-
-@app.patch(f"{settings.API_V1_STR}/messages/{{message_id}}/read", response_model=schemas.MessageResponse)
-def mark_message_read(
-    message_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    db_msg = crud.mark_message_read(db, message_id=message_id, user_id=current_user.id)
-    if not db_msg:
-        raise HTTPException(status_code=404, detail="Message not found or unauthorized")
-    return db_msg
-
-
-@app.delete(f"{settings.API_V1_STR}/messages/{{message_id}}")
-def delete_message(
-    message_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    success = crud.delete_message(db, message_id=message_id, user_id=current_user.id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Message not found or unauthorized to delete")
-    return {"detail": "Message deleted successfully"}
+# Messaging routers removed

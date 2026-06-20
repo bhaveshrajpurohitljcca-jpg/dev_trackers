@@ -35,10 +35,7 @@ class User(Base):
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
     project_logs = relationship("ProjectLog", back_populates="user", cascade="all, delete-orphan")
     streak = relationship("Streak", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    achievements = relationship("UserAchievement", back_populates="user", cascade="all, delete-orphan")
     activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
-    sent_messages = relationship("Message", foreign_keys="[Message.sender_id]", back_populates="sender", cascade="all, delete-orphan")
-    received_messages = relationship("Message", foreign_keys="[Message.recipient_id]", back_populates="recipient", cascade="all, delete-orphan")
 
 
 class Technology(Base):
@@ -105,7 +102,8 @@ class DailyLog(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     date = Column(Date, nullable=False)
     category = Column(String, nullable=False)  # Coding, Learning, Research, Other
-    hours = Column(Float, nullable=False)
+    hours = Column(Integer, nullable=False)
+    minutes = Column(Integer, nullable=False)
     description = Column(Text, nullable=False)
     created_at = Column(DateTime, default=get_ist_time)
 
@@ -123,7 +121,14 @@ class Project(Base):
     status = Column(String, nullable=False, default="Active")  # Active, Completed, Archived
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
-    hours_invested = Column(Float, default=0.0)
+    github_url = Column(String, nullable=True)
+    host_url = Column(String, nullable=True)
+    hours_invested_hours = Column(Integer, default=0, nullable=False)
+    hours_invested_minutes = Column(Integer, default=0, nullable=False)
+
+    @property
+    def hours_invested(self):
+        return self.hours_invested_hours + self.hours_invested_minutes / 60.0
 
     # Relationships
     user = relationship("User", back_populates="projects")
@@ -136,7 +141,8 @@ class ProjectLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    hours = Column(Float, nullable=False)
+    hours = Column(Integer, nullable=False)
+    minutes = Column(Integer, nullable=False)
     description = Column(Text, nullable=False)
     logged_at = Column(DateTime, default=get_ist_time)
 
@@ -158,32 +164,7 @@ class Streak(Base):
     user = relationship("User", back_populates="streak")
 
 
-class Achievement(Base):
-    __tablename__ = "achievements"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True, nullable=False)
-    description = Column(Text, nullable=False)
-    criteria_type = Column(String, nullable=False)  # total_hours, streak, completed_tech, first_log
-    criteria_value = Column(String, nullable=False) # e.g., "10", "50", "7", "python"
-
-    # Relationships
-    user_achievements = relationship("UserAchievement", back_populates="achievement", cascade="all, delete-orphan")
-
-
-class UserAchievement(Base):
-    __tablename__ = "user_achievements"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    achievement_id = Column(Integer, ForeignKey("achievements.id"), nullable=False)
-    unlocked_at = Column(DateTime, default=get_ist_time)
-
-    # Relationships
-    user = relationship("User", back_populates="achievements")
-    achievement = relationship("Achievement", back_populates="user_achievements")
-
-    __table_args__ = (UniqueConstraint('user_id', 'achievement_id', name='_user_achievement_uc'),)
+# Achievements tables were removed
 
 
 class EmailLog(Base):
@@ -224,24 +205,4 @@ class Settings(Base):
     smtp_password = Column(String, nullable=True, default="")
 
 
-class Message(Base):
-    __tablename__ = "messages"
-
-    id = Column(Integer, primary_key=True, index=True)
-    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    recipient_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    content = Column(Text, nullable=False)
-    is_read = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=get_ist_time)
-
-    # Relationships
-    sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
-    recipient = relationship("User", foreign_keys=[recipient_id], back_populates="received_messages")
-
-    @property
-    def sender_name(self):
-        return self.sender.full_name if self.sender else "Unknown"
-
-    @property
-    def recipient_name(self):
-        return self.recipient.full_name if self.recipient else "Unknown"
+# Messages table was removed

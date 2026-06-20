@@ -263,19 +263,21 @@ def create_daily_log(db: Session, user_id: int, log_data: schemas.DailyLogCreate
             existing_category_log = log
             break
             
-    other_categories_hours = sum(log.hours for log in existing_logs if log != existing_category_log)
+    other_categories_minutes = sum(log.hours * 60 + log.minutes for log in existing_logs if log != existing_category_log)
     
-    # Calculate the potential new total hours for the day
-    new_total_hours = other_categories_hours + log_data.hours
+    # Calculate the potential new total minutes for the day
+    new_total_minutes = other_categories_minutes + (log_data.hours * 60 + log_data.minutes)
     if existing_category_log:
-        new_total_hours += existing_category_log.hours
+        new_total_minutes += existing_category_log.hours * 60 + existing_category_log.minutes
         
-    if new_total_hours > 24.0:
+    if new_total_minutes > 24 * 60:
         raise ValueError("Total working hours for a single day (Coding + Learning + etc.) cannot exceed 24 hours.")
         
     # If a log for this category already exists, update it
     if existing_category_log:
-        existing_category_log.hours += log_data.hours
+        total_m = (existing_category_log.hours + log_data.hours) * 60 + (existing_category_log.minutes + log_data.minutes)
+        existing_category_log.hours = total_m // 60
+        existing_category_log.minutes = total_m % 60
         existing_category_log.description = existing_category_log.description + " | " + log_data.description
         db.commit()
         db.refresh(existing_category_log)
@@ -287,6 +289,7 @@ def create_daily_log(db: Session, user_id: int, log_data: schemas.DailyLogCreate
             date=log_data.date,
             category=log_data.category,
             hours=log_data.hours,
+            minutes=log_data.minutes,
             description=log_data.description
         )
         db.add(db_log)
@@ -310,7 +313,7 @@ def create_daily_log(db: Session, user_id: int, log_data: schemas.DailyLogCreate
     log_activity(
         db, user_id=user_id, user_name=user.full_name if user else "User",
         activity_type="log_hours",
-        detail=f"Logged {log_data.hours} hours of {log_data.category} on {log_data.date}"
+        detail=f"Logged {log_data.hours}h {log_data.minutes}m of {log_data.category} on {log_data.date}"
     )
     
     db.commit()
@@ -381,7 +384,10 @@ def create_project(db: Session, user_id: int, project: schemas.ProjectCreate):
         status=project.status,
         start_date=project.start_date,
         end_date=project.end_date,
-        hours_invested=0.0
+        github_url=project.github_url,
+        host_url=project.host_url,
+        hours_invested_hours=0,
+        hours_invested_minutes=0
     )
     db.add(db_project)
     db.commit()
@@ -426,12 +432,15 @@ def log_project_hours(db: Session, project_id: int, user_id: int, log_data: sche
         project_id=project_id,
         user_id=user_id,
         hours=log_data.hours,
+        minutes=log_data.minutes,
         description=log_data.description
     )
     db.add(db_log)
     
     # Update total hours invested in project
-    db_project.hours_invested += log_data.hours
+    total_m = (db_project.hours_invested_hours + log_data.hours) * 60 + (db_project.hours_invested_minutes + log_data.minutes)
+    db_project.hours_invested_hours = total_m // 60
+    db_project.hours_invested_minutes = total_m % 60
     
     # Also create a DailyLog entry corresponding to this coding log automatically for ease of use
     # Check if there is already a DailyLog for today, if not or if yes, add it to maintain daily log stats
@@ -440,6 +449,7 @@ def log_project_hours(db: Session, project_id: int, user_id: int, log_data: sche
         date=today_date,
         category="Coding",
         hours=log_data.hours,
+        minutes=log_data.minutes,
         description=f"Working on Project {db_project.name}: {log_data.description}"
     )
     create_daily_log(db, user_id, daily_log)
@@ -474,29 +484,66 @@ def update_settings(db: Session, settings_data: schemas.SettingsUpdate):
     db.refresh(settings_rec)
     return settings_rec
 
-# ==========================================
-# ACHIEVEMENTS & TRIGGER RULES
-# ==========================================
-
-def get_achievements(db: Session):
-    return db.query(models.Achievement).all()
-
-def seed_default_achievements(db: Session):
-    pass
-
-def check_and_unlock_achievements(db: Session, user_id: int):
-    pass
-
-# Create achievements dynamically for assigned technologies if completed
-def check_technology_achievements(db: Session, user_id: int):
-    pass
-
-# ==========================================
-# SYSTEM DATA SEEDING
-# ==========================================
-
 def seed_default_technologies(db: Session):
-    pass
+    techs_data = [
+        {
+            "name": "Python",
+            "description": "General purpose programming language",
+            "topics": ["Variables", "Loops", "Functions", "OOP", "File Handling", "Exception Handling", "Decorators", "Generators"]
+        },
+        {
+            "name": "SQL",
+            "description": "Structured Query Language for database management",
+            "topics": ["Basics & Select", "Filters & Operators", "Joins", "Aggregations", "Subqueries", "Indexes", "Transactions"]
+        },
+        {
+            "name": "FastAPI",
+            "description": "Modern, fast web framework for building APIs with Python",
+            "topics": ["Routing", "Path/Query Parameters", "Pydantic Models", "Dependencies", "Database Integration", "JWT Authentication", "CORS & Security"]
+        },
+        {
+            "name": "PostgreSQL",
+            "description": "Advanced open source relational database",
+            "topics": ["Data Types", "Constraints", "Views & Triggers", "Functions & Stored Procedures", "Performance Tuning"]
+        },
+        {
+            "name": "React",
+            "description": "JavaScript library for building user interfaces",
+            "topics": ["JSX", "Components & Props", "State & Hook (useState)", "Effect Hook (useEffect)", "Context API", "Custom Hooks", "Performance Optimization"]
+        },
+        {
+            "name": "TypeScript",
+            "description": "Typed superset of JavaScript",
+            "topics": ["Types & Interfaces", "Generics", "Enums", "Union & Intersection Types", "TS Config & Compiler Settings"]
+        },
+        {
+            "name": "Java",
+            "description": "Object-oriented, class-based language",
+            "topics": ["Syntax & Control Flow", "Classes & Interfaces", "Inheritance & Polymorphism", "Collections Framework", "Streams API & Lambdas", "Multithreading"]
+        },
+        {
+            "name": "Spring Boot",
+            "description": "Java-based framework for enterprise-ready applications",
+            "topics": ["Dependency Injection", "Spring MVC", "Spring Data JPA", "Spring Security", "REST API Development", "Testing"]
+        },
+        {
+            "name": "MySQL",
+            "description": "Popular open-source relational database",
+            "topics": ["Table Design", "CRUD Queries", "Index Optimization", "Stored Procedures"]
+        }
+    ]
+    
+    for t_data in techs_data:
+        db_tech = db.query(models.Technology).filter(models.Technology.name == t_data["name"]).first()
+        if not db_tech:
+            db_tech = models.Technology(name=t_data["name"], description=t_data["description"])
+            db.add(db_tech)
+            db.commit()
+            db.refresh(db_tech)
+            for idx, name in enumerate(t_data["topics"]):
+                db_topic = models.Topic(technology_id=db_tech.id, name=name, sequence_order=idx)
+                db.add(db_topic)
+    db.commit()
 
 def seed_admin_user(db: Session):
     db_admin = db.query(models.User).filter(models.User.username == "admin").first()
@@ -507,74 +554,56 @@ def seed_admin_user(db: Session):
             email="admin@tracker.com",
             password="admin123", # default password
             role="admin",
-            primary_team="Management",
+            team="Management",
             is_active=True
         )
         create_user(db, admin_create)
         
+    # Seed default user "bhavesh"
+    db_user1 = db.query(models.User).filter(models.User.username == "bhavesh").first()
+    if not db_user1:
+        user_create = schemas.UserCreate(
+            full_name="Bhavesh Rajpurohit",
+            username="bhavesh",
+            email="bhavesh@tracker.com",
+            password="user123",
+            role="user",
+            team="Backend Development",
+            is_active=True
+        )
+        db_user = create_user(db, user_create)
+        
+        # Assign default roadmaps (Python, SQL, FastAPI, PostgreSQL, React, TypeScript)
+        tech_names = ["Python", "SQL", "FastAPI", "PostgreSQL", "React", "TypeScript"]
+        techs = db.query(models.Technology).filter(models.Technology.name.in_(tech_names)).all()
+        assign_roadmap(db, db_user.id, [t.id for t in techs])
+        
+    # Seed default user "rahul"
+    db_user2 = db.query(models.User).filter(models.User.username == "rahul").first()
+    if not db_user2:
+        user_create = schemas.UserCreate(
+            full_name="Rahul Sharma",
+            username="rahul",
+            email="rahul@tracker.com",
+            password="user123",
+            role="user",
+            team="Java Development",
+            is_active=True
+        )
+        db_user = create_user(db, user_create)
+        
+        # Assign default roadmaps (Java, Spring Boot, MySQL)
+        tech_names = ["Java", "Spring Boot", "MySQL"]
+        techs = db.query(models.Technology).filter(models.Technology.name.in_(tech_names)).all()
+        assign_roadmap(db, db_user.id, [t.id for t in techs])
+        
     db.commit()
 
+# Achievements logic removed
 def run_db_seeding(db: Session):
-    seed_default_achievements(db)
     seed_default_technologies(db)
     seed_admin_user(db)
 
 
 # ==========================================
-# MESSAGE OPERATIONS
-# ==========================================
-
-def create_message(db: Session, sender_id: int, message: schemas.MessageCreate):
-    db_msg = models.Message(
-        sender_id=sender_id,
-        recipient_id=message.recipient_id,
-        content=message.content
-    )
-    db.add(db_msg)
-    db.commit()
-    db.refresh(db_msg)
-    return db_msg
-
-def get_received_messages(db: Session, user_id: int, limit: int = 5, skip: int = 0):
-    return db.query(models.Message)\
-        .filter(models.Message.recipient_id == user_id)\
-        .order_by(models.Message.created_at.desc())\
-        .offset(skip)\
-        .limit(limit)\
-        .all()
-
-def get_sent_messages(db: Session, admin_id: int, limit: int = 5, skip: int = 0):
-    return db.query(models.Message)\
-        .filter(models.Message.sender_id == admin_id)\
-        .order_by(models.Message.created_at.desc())\
-        .offset(skip)\
-        .limit(limit)\
-        .all()
-
-def delete_message(db: Session, message_id: int, user_id: int):
-    db_msg = db.query(models.Message).filter(models.Message.id == message_id).first()
-    if not db_msg:
-        return False
-    if db_msg.sender_id == user_id or db_msg.recipient_id == user_id:
-        db.delete(db_msg)
-        db.commit()
-        return True
-    return False
-
-def mark_message_read(db: Session, message_id: int, user_id: int):
-    db_msg = db.query(models.Message).filter(
-        models.Message.id == message_id,
-        models.Message.recipient_id == user_id
-    ).first()
-    if not db_msg:
-        return None
-    db_msg.is_read = True
-    db.commit()
-    db.refresh(db_msg)
-    return db_msg
-
-def get_unread_messages_count(db: Session, user_id: int):
-    return db.query(models.Message).filter(
-        models.Message.recipient_id == user_id,
-        models.Message.is_read == False
-    ).count()
+# Messaging logic removed

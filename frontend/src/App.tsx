@@ -36,12 +36,11 @@ import {
   TrendingUp,
   ShieldCheck,
   CalendarDays,
-  Sliders,
-  MessageSquare,
-  Send
+  Sliders
 } from 'lucide-react';
 import { api } from './services/api';
-import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, EmailLog, Message } from './services/api';
+import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, EmailLog } from './services/api';
+import { SUGGESTED_PROJECTS } from './data/suggestedProjects';
 
 // ============================================================================
 // CONTEXT / STATE PROVIDER
@@ -164,29 +163,11 @@ function Sidebar() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [unreadCount, setUnreadCount] = useState(0);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
-
-  useEffect(() => {
-    if (!user || user.role !== 'user') return;
-    
-    const fetchUnreadCount = async () => {
-      try {
-        const res = await api.getUnreadMessageCount();
-        setUnreadCount(res.count);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }, [user, location.pathname]);
 
   if (!user) return null;
 
@@ -223,10 +204,6 @@ function Sidebar() {
               <SettingsIcon size={18} />
               <span>Settings</span>
             </Link>
-            <Link to="/admin/messages" className={`sidebar-link ${location.pathname === '/admin/messages' ? 'active' : ''}`}>
-              <MessageSquare size={18} />
-              <span>Messages</span>
-            </Link>
           </>
         ) : (
           <>
@@ -249,26 +226,6 @@ function Sidebar() {
             <Link to="/leaderboard" className={`sidebar-link ${location.pathname === '/leaderboard' ? 'active' : ''}`}>
               <Trophy size={18} />
               <span>Leaderboard</span>
-            </Link>
-            <Link to="/messages" className={`sidebar-link ${location.pathname === '/messages' ? 'active' : ''}`}>
-              <MessageSquare size={18} />
-              <span>Messages</span>
-              {unreadCount > 0 && (
-                <span 
-                  style={{ 
-                    marginLeft: 'auto', 
-                    background: '#ef4444', 
-                    color: 'white', 
-                    borderRadius: '9999px', 
-                    padding: '0.1rem 0.45rem', 
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    lineHeight: 1
-                  }}
-                >
-                  {unreadCount}
-                </span>
-              )}
             </Link>
           </>
         )}
@@ -313,14 +270,26 @@ const toLocalDateString = (d: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const formatHours = (hoursFloat: number | undefined | null) => {
-  if (hoursFloat === undefined || hoursFloat === null || isNaN(hoursFloat)) return '0 hrs';
-  const h = Math.floor(hoursFloat);
-  const m = Math.round((hoursFloat - h) * 60);
-  if (h === 0 && m === 0) return '0 hrs';
-  if (h === 0) return `${m} mins`;
-  if (m === 0) return `${h} hrs`;
-  return `${h}h ${m}m`;
+const formatHours = (hours: number | undefined | null, minutes?: number) => {
+  if (hours === undefined || hours === null || isNaN(hours)) return '0 hrs';
+  
+  if (minutes === undefined) {
+    if (hours % 1 !== 0) {
+      const h = Math.floor(hours);
+      const m = Math.round((hours - h) * 60);
+      if (h === 0 && m === 0) return '0 hrs';
+      if (h === 0) return `${m} mins`;
+      if (m === 0) return `${h} hrs`;
+      return `${h}h ${m}m`;
+    } else {
+      return `${hours} hrs`;
+    }
+  }
+  
+  if (hours === 0 && minutes === 0) return '0 hrs';
+  if (hours === 0) return `${minutes} mins`;
+  if (minutes === 0) return `${hours} hrs`;
+  return `${hours}h ${minutes}m`;
 };
 
 // ============================================================================
@@ -609,16 +578,12 @@ export function Login() {
 export function UserDashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [unreadMessages, setUnreadMessages] = useState<Message[]>([]);
-  const { showSuccess, showError, ToastComponent } = useToast();
+  const { ToastComponent } = useToast();
 
   const fetchDashboard = async () => {
     try {
       const dbData = await api.getUserDashboard();
       setData(dbData);
-      
-      const received = await api.getReceivedMessages(5, 0);
-      setUnreadMessages(received.filter(m => !m.is_read));
     } catch (err) {
       console.error(err);
     } finally {
@@ -630,98 +595,11 @@ export function UserDashboard() {
     fetchDashboard();
   }, []);
 
-  const handleMarkSeen = async (messageId: number) => {
-    try {
-      await api.markMessageRead(messageId);
-      setUnreadMessages(prev => prev.filter(m => m.id !== messageId));
-      showSuccess('Message marked as seen');
-    } catch (err: any) {
-      showError(err.message || 'Failed to mark as read');
-    }
-  };
-
-  const handleDeleteMessage = async (messageId: number) => {
-    if (!window.confirm('Are you sure you want to delete this message?')) return;
-    try {
-      await api.deleteMessage(messageId);
-      setUnreadMessages(prev => prev.filter(m => m.id !== messageId));
-      showSuccess('Message deleted successfully');
-    } catch (err: any) {
-      showError(err.message || 'Failed to delete message');
-    }
-  };
-
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
 
   return (
     <Layout>
       {ToastComponent}
-      {/* FLOATING NEW MESSAGES ALERT */}
-      {unreadMessages.length > 0 && (
-        <div 
-          className="glass-card" 
-          style={{ 
-            position: 'fixed', 
-            bottom: '2rem', 
-            right: '2rem', 
-            zIndex: 9999, 
-            width: '380px', 
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)',
-            borderLeft: '4px solid var(--color-primary, #6366f1)',
-            padding: '1.25rem',
-            background: 'rgba(17, 24, 39, 0.95)',
-            backdropFilter: 'blur(12px)'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h4 style={{ margin: 0, fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <MessageSquare size={16} color="var(--color-primary)" />
-              New Message from Admin
-            </h4>
-            <span style={{ fontSize: '0.75rem', background: '#ef4444', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 600 }}>
-              {unreadMessages.length} New
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '250px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-            {unreadMessages.map((msg) => (
-              <div 
-                key={msg.id} 
-                style={{ 
-                  background: 'rgba(255, 255, 255, 0.02)', 
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
-                  padding: '0.75rem',
-                  borderRadius: '8px'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
-                  <span>Sent by {msg.sender_name || 'Admin'}</span>
-                  <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-                <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
-                  {msg.content}
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                  <button 
-                    className="btn btn-outline" 
-                    style={{ padding: '0.2rem 0.5rem', minWidth: 'auto', fontSize: '0.75rem', height: '24px', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                    onClick={() => handleMarkSeen(msg.id)}
-                  >
-                    <Check size={12} /> Seen
-                  </button>
-                  <button 
-                    className="btn btn-outline" 
-                    style={{ padding: '0.2rem', minWidth: 'auto', height: '24px', color: '#ff4d4f', borderColor: 'rgba(255, 77, 79, 0.15)' }}
-                    onClick={() => handleDeleteMessage(msg.id)}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       <div style={{ 
         marginBottom: '2rem', 
         padding: '2.5rem 2rem', 
@@ -1250,12 +1128,13 @@ export function WorkLogs() {
       return;
     }
     
-    let h = 0;
+    let hoursVal = 0;
+    let minsVal = 0;
     let desc = 'Nothing Today';
     
     if (!isNothingToday) {
-      const hoursVal = parseInt(logHours, 10);
-      const minsVal = parseInt(logMinutes, 10);
+      hoursVal = parseInt(logHours, 10);
+      minsVal = parseInt(logMinutes, 10);
       if (isNaN(hoursVal) || hoursVal < 0 || hoursVal > 24) {
         showError('Hours must be an integer between 0 and 24');
         return;
@@ -1264,12 +1143,11 @@ export function WorkLogs() {
         showError('Minutes must be an integer between 0 and 59');
         return;
       }
-      h = hoursVal + (minsVal / 60.0);
-      if (h <= 0) {
+      if (hoursVal === 0 && minsVal === 0) {
         showError('Total log time must be greater than 0');
         return;
       }
-      if (h > 24) {
+      if (hoursVal === 24 && minsVal > 0) {
         showError('Total log time cannot exceed 24 hours');
         return;
       }
@@ -1281,7 +1159,8 @@ export function WorkLogs() {
       await api.logWork({
         date: toLocalDateString(new Date()),
         category,
-        hours: h,
+        hours: hoursVal,
+        minutes: minsVal,
         description: desc,
       });
       showSuccess('Work hours logged successfully!');
@@ -1416,7 +1295,7 @@ export function WorkLogs() {
                         {log.category}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{formatHours(log.hours)}</td>
+                    <td style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{formatHours(log.hours, log.minutes)}</td>
                     <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.description}>
                       {log.description}
                     </td>
@@ -1611,6 +1490,61 @@ export function Projects() {
   const [status, setStatus] = useState<'Active' | 'Completed' | 'Archived'>('Active');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [githubUrl, setGithubUrl] = useState('');
+  const [hostUrl, setHostUrl] = useState('');
+
+  // Suggested Projects team & technology selection logic
+  const mapUserTeamToKey = (userTeam: string | null | undefined): string | null => {
+    if (!userTeam) return null;
+    const lower = userTeam.toLowerCase();
+    if (lower.includes('back')) return 'Backend Team';
+    if (lower.includes('front')) return 'Frontend Team';
+    if (lower.includes('data') || lower.includes('db') || lower.includes('sql') || lower.includes('postgres')) return 'Database Team';
+    return null;
+  };
+
+  const userPrimaryMapped = mapUserTeamToKey(user?.primary_team);
+  const userSecondaryMapped = mapUserTeamToKey(user?.secondary_team);
+
+  const availableTeams = useMemo(() => {
+    const teamsSet = new Set<string>();
+    if (userPrimaryMapped) teamsSet.add(userPrimaryMapped);
+    if (userSecondaryMapped) teamsSet.add(userSecondaryMapped);
+    
+    // If none are mapped or user is admin/unassigned, show all teams
+    if (teamsSet.size === 0) {
+      return ["Backend Team", "Database Team", "Frontend Team"];
+    }
+    return Array.from(teamsSet);
+  }, [userPrimaryMapped, userSecondaryMapped]);
+
+  const [selectedTeam, setSelectedTeam] = useState<string>('');
+
+  useEffect(() => {
+    if (availableTeams.length > 0) {
+      setSelectedTeam(availableTeams[0]);
+    }
+  }, [availableTeams]);
+
+  const availableTechs = useMemo(() => {
+    if (!selectedTeam || !SUGGESTED_PROJECTS[selectedTeam]) return [];
+    return Object.keys(SUGGESTED_PROJECTS[selectedTeam]);
+  }, [selectedTeam]);
+
+  const [selectedTech, setSelectedTech] = useState<string>('');
+
+  useEffect(() => {
+    if (availableTechs.length > 0) {
+      setSelectedTech(availableTechs[0]);
+    } else {
+      setSelectedTech('');
+    }
+  }, [availableTechs]);
+
+  const suggestedList = useMemo(() => {
+    if (!selectedTeam || !selectedTech || !SUGGESTED_PROJECTS[selectedTeam]) return [];
+    return SUGGESTED_PROJECTS[selectedTeam][selectedTech] || [];
+  }, [selectedTeam, selectedTech]);
 
   const fetchProjects = async () => {
     try {
@@ -1641,7 +1575,9 @@ export function Projects() {
         description: description || null,
         status,
         start_date: startDate || null,
-        end_date: endDate || null
+        end_date: endDate || null,
+        github_url: githubUrl || null,
+        host_url: hostUrl || null
       });
       showSuccess('Project created successfully!');
       
@@ -1651,6 +1587,8 @@ export function Projects() {
       setStatus('Active');
       setStartDate('');
       setEndDate('');
+      setGithubUrl('');
+      setHostUrl('');
       setShowModal(false);
       
       fetchProjects();
@@ -1737,6 +1675,32 @@ export function Projects() {
                 </div>
               </div>
 
+              <div className="form-group">
+                <label className="form-label" htmlFor="proj-github">GitHub Repository Link (Optional)</label>
+                <input 
+                  id="proj-github"
+                  type="url" 
+                  className="form-input" 
+                  placeholder="e.g. https://github.com/username/repo"
+                  value={githubUrl} 
+                  onChange={(e) => setGithubUrl(e.target.value)} 
+                  disabled={submitting}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="proj-host">Hosted Website Link (Optional)</label>
+                <input 
+                  id="proj-host"
+                  type="url" 
+                  className="form-input" 
+                  placeholder="e.g. https://myproject.vercel.app"
+                  value={hostUrl} 
+                  onChange={(e) => setHostUrl(e.target.value)} 
+                  disabled={submitting}
+                />
+              </div>
+
               <button className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} type="submit" disabled={submitting}>
                 {submitting ? 'Creating...' : 'Create Project'}
               </button>
@@ -1745,50 +1709,189 @@ export function Projects() {
         </div>
       )}
 
-      {/* PROJECTS GRID */}
-      {projects.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
-          {projects.map((proj) => (
-            <div key={proj.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                <span className={`badge badge-${proj.status.toLowerCase()}`}>{proj.status}</span>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                  {proj.start_date || 'N/A'} - {proj.end_date || 'N/A'}
-                </span>
-              </div>
-
-              <h3 style={{ fontSize: '1.2rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{proj.name}</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', flex: 1, marginBottom: '1.5rem', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {proj.description || 'No description provided.'}
-              </p>
-
-              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Hours Invested</div>
-                    <strong style={{ fontSize: '1.1rem', color: 'var(--color-primary)' }}>{formatHours(proj.hours_invested)}</strong>
+      {/* TWO-COLUMN LAYOUT */}
+      <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        {/* Left Column: My Projects */}
+        <div style={{ flex: '1 1 500px' }}>
+          {projects.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+              {projects.map((proj) => (
+                <div key={proj.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                    <span className={`badge badge-${proj.status.toLowerCase()}`}>{proj.status}</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                      {proj.start_date || 'N/A'} - {proj.end_date || 'N/A'}
+                    </span>
                   </div>
-                  <Link to={`/projects/${proj.id}`} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
-                    Open Details
-                  </Link>
+
+                  <h3 style={{ fontSize: '1.2rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{proj.name}</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', flex: 1, marginBottom: '0.75rem', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {proj.description || 'No description provided.'}
+                  </p>
+
+                  {/* Project Links */}
+                  <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                    {proj.github_url && (
+                      <a 
+                        href={proj.github_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--color-secondary)', textDecoration: 'none', fontWeight: 600 }}
+                      >
+                        <FolderGit2 size={14} /> Repo
+                      </a>
+                    )}
+                    {proj.host_url && (
+                      <a 
+                        href={proj.host_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--color-success)', textDecoration: 'none', fontWeight: 600 }}
+                      >
+                        <CheckCircle2 size={14} /> Live Site
+                      </a>
+                    )}
+                  </div>
+
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Hours Invested</div>
+                        <strong style={{ fontSize: '1.1rem', color: 'var(--color-primary)' }}>{formatHours(proj.hours_invested)}</strong>
+                      </div>
+                      <Link to={`/projects/${proj.id}`} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
+                        Open Details
+                      </Link>
+                    </div>
+                  </div>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <div className="glass-card">
+              <div className="empty-state">
+                <FolderGit2 size={48} className="empty-icon" />
+                <h3>No projects registered</h3>
+                {user?.role === 'user' ? (
+                  <p>Get started by creating a new project mapping your coding goals.</p>
+                ) : (
+                  <p>No developers have created projects yet.</p>
+                )}
               </div>
             </div>
-          ))}
+          )}
         </div>
-      ) : (
-        <div className="glass-card">
-          <div className="empty-state">
-            <FolderGit2 size={48} className="empty-icon" />
-            <h3>No projects registered</h3>
-            {user?.role === 'user' ? (
-              <p>Get started by creating a new project mapping your coding goals.</p>
-            ) : (
-              <p>No developers have created projects yet.</p>
-            )}
+
+        {/* Right Column: Suggested Projects Sidebar */}
+        <div style={{ flex: '0 0 380px', width: '380px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="glass-card" style={{ padding: '1.5rem', maxHeight: 'calc(100vh - 12rem)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Award size={18} style={{ color: 'var(--color-primary)' }} /> Suggested Projects
+              </h3>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                Assigned projects based on your active development tracks.
+              </p>
+            </div>
+
+            {/* Selector Dropdowns */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              {availableTeams.length > 1 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>ACTIVE TEAM</label>
+                  <select 
+                    value={selectedTeam} 
+                    onChange={(e) => setSelectedTeam(e.target.value)} 
+                    style={{ 
+                      backgroundColor: 'rgba(255,255,255,0.02)', 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '8px', 
+                      padding: '0.5rem', 
+                      color: 'var(--text-primary)', 
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  >
+                    {availableTeams.map(t => (
+                      <option key={t} value={t} style={{ backgroundColor: '#18181b', color: 'var(--text-primary)' }}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {availableTechs.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>TECHNOLOGY</label>
+                  <select 
+                    value={selectedTech} 
+                    onChange={(e) => setSelectedTech(e.target.value)}
+                    style={{ 
+                      backgroundColor: 'rgba(255,255,255,0.02)', 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '8px', 
+                      padding: '0.5rem', 
+                      color: 'var(--text-primary)', 
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  >
+                    {availableTechs.map(tech => (
+                      <option key={tech} value={tech} style={{ backgroundColor: '#18181b', color: 'var(--text-primary)' }}>{tech}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Scrollable Levels List */}
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {suggestedList.length > 0 ? (
+                suggestedList.map((item) => (
+                  <div 
+                    key={item.level} 
+                    style={{ 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '10px', 
+                      padding: '1rem', 
+                      backgroundColor: 'rgba(255,255,255,0.01)',
+                      transition: 'border-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.3)'}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-primary)', letterSpacing: '0.05em' }}>
+                        Level {item.level}
+                      </span>
+                    </div>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                      {item.title}
+                    </h4>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4', marginBottom: '0.75rem' }}>
+                      {item.description}
+                    </p>
+                    
+                    {item.challenges && item.challenges.length > 0 && (
+                      <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Extra Challenges:</span>
+                        <ul style={{ listStyleType: 'disc', paddingLeft: '1rem', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          {item.challenges.map((c, i) => (
+                            <li key={i} style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)' }}>
+                  No suggested projects found for this selection.
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </Layout>
   );
 }
@@ -1809,6 +1912,7 @@ export function ProjectDetails() {
 
   // Log Hours Form
   const [hours, setHours] = useState('');
+  const [minutes, setMinutes] = useState('');
   const [description, setDescription] = useState('');
 
   const fetchProjectDetail = async () => {
@@ -1829,26 +1933,41 @@ export function ProjectDetails() {
 
   const handleLogHours = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project_id || !hours || !description) {
+    if (!project_id || !hours || !minutes || !description) {
       showError('Please fill in all fields');
       return;
     }
 
-    const h = parseFloat(hours);
-    if (isNaN(h) || h <= 0 || h > 24) {
-      showError('Hours must be a number between 0 and 24');
+    const hoursVal = parseInt(hours, 10);
+    const minsVal = parseInt(minutes, 10);
+    if (isNaN(hoursVal) || hoursVal < 0 || hoursVal > 24) {
+      showError('Hours must be an integer between 0 and 24');
+      return;
+    }
+    if (isNaN(minsVal) || minsVal < 0 || minsVal > 59) {
+      showError('Minutes must be an integer between 0 and 59');
+      return;
+    }
+    if (hoursVal === 0 && minsVal === 0) {
+      showError('Total log time must be greater than 0');
+      return;
+    }
+    if (hoursVal === 24 && minsVal > 0) {
+      showError('Total log time cannot exceed 24 hours');
       return;
     }
 
     setSubmittingLog(true);
     try {
       await api.logProjectHours(parseInt(project_id), { 
-        hours: h, 
+        hours: hoursVal, 
+        minutes: minsVal,
         description,
         date: toLocalDateString(new Date())
       });
       showSuccess('Hours logged and registered on your daily feed!');
       setHours('');
+      setMinutes('');
       setDescription('');
       setShowLogModal(false);
       fetchProjectDetail();
@@ -1909,18 +2028,35 @@ export function ProjectDetails() {
             </div>
             
             <form onSubmit={handleLogHours}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="log-hrs">Hours Invested</label>
-                <input 
-                  id="log-hrs"
-                  type="number" 
-                  step="0.5" 
-                  placeholder="e.g. 3"
-                  className="form-input" 
-                  value={hours} 
-                  onChange={(e) => setHours(e.target.value)} 
-                  disabled={submittingLog}
-                />
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label" htmlFor="log-hrs">Hours</label>
+                  <input 
+                    id="log-hrs"
+                    type="number" 
+                    min="0"
+                    max="24"
+                    placeholder="0"
+                    className="form-input" 
+                    value={hours} 
+                    onChange={(e) => setHours(e.target.value)} 
+                    disabled={submittingLog}
+                  />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label" htmlFor="log-mins">Minutes</label>
+                  <input 
+                    id="log-mins"
+                    type="number" 
+                    min="0"
+                    max="59"
+                    placeholder="0"
+                    className="form-input" 
+                    value={minutes} 
+                    onChange={(e) => setMinutes(e.target.value)} 
+                    disabled={submittingLog}
+                  />
+                </div>
               </div>
 
               <div className="form-group">
@@ -1965,7 +2101,7 @@ export function ProjectDetails() {
                   }} />
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ color: 'var(--color-secondary)' }}>{formatHours(log.hours)}</strong>
+                      <strong style={{ color: 'var(--color-secondary)' }}>{formatHours(log.hours, log.minutes)}</strong>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         {new Date(log.logged_at).toLocaleString()}
                       </span>
@@ -2005,6 +2141,24 @@ export function ProjectDetails() {
                 {project.description || 'No description provided.'}
               </p>
             </div>
+
+            {project.github_url && (
+              <div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>GitHub Repository</div>
+                <a href={project.github_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-secondary)', fontWeight: 600, fontSize: '0.9rem', textDecoration: 'none' }}>
+                  <FolderGit2 size={16} /> View Code
+                </a>
+              </div>
+            )}
+
+            {project.host_url && (
+              <div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Hosted Live Site</div>
+                <a href={project.host_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-success)', fontWeight: 600, fontSize: '0.9rem', textDecoration: 'none' }}>
+                  <CheckCircle2 size={16} /> Visit Website
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -4050,7 +4204,7 @@ export function AdminPerformance() {
                                   {user.today_log.category}
                                 </span>
                                 <strong style={{ color: 'var(--text-primary)', fontSize: '0.8rem' }}>
-                                  {formatHours(user.today_log.hours)}
+                                  {formatHours(user.today_log.hours, user.today_log.minutes)}
                                 </strong>
                               </div>
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
@@ -4133,396 +4287,6 @@ export function AdminPerformance() {
 
 
 // ==============================================================================================================
-// PAGE: USER MESSAGES
-// ==============================================================================================================
-
-export function UserMessages() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const { showSuccess, showError, ToastComponent } = useToast();
-
-  const fetchMessages = async (skipCount = 0) => {
-    try {
-      if (skipCount === 0) {
-        setLoading(true);
-      } else {
-        setLoadingMore(true);
-      }
-      const data = await api.getReceivedMessages(5, skipCount);
-      if (skipCount === 0) {
-        setMessages(data);
-      } else {
-        setMessages((prev) => [...prev, ...data]);
-      }
-      setHasMore(data.length === 5);
-
-      // Automatically mark unread messages as read
-      data.forEach(async (msg) => {
-        if (!msg.is_read) {
-          try {
-            await api.markMessageRead(msg.id);
-            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, is_read: true } : m));
-          } catch (e) {
-            console.error('Failed to mark message as read:', e);
-          }
-        }
-      });
-    } catch (err: any) {
-      showError(err.message || 'Failed to load messages');
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMessages(0);
-  }, []);
-
-  const handleDelete = async (messageId: number) => {
-    if (!window.confirm('Are you sure you want to delete this message?')) return;
-    try {
-      await api.deleteMessage(messageId);
-      setMessages((prev) => prev.filter((m) => m.id !== messageId));
-      showSuccess('Message deleted successfully');
-    } catch (err: any) {
-      showError(err.message || 'Failed to delete message');
-    }
-  };
-
-  return (
-    <Layout>
-      {ToastComponent}
-      <div className="page-header">
-        <div className="page-title-section">
-          <h1 className="page-title">Received Messages</h1>
-          <span className="page-subtitle">View notifications and guidelines sent by administrators.</span>
-        </div>
-      </div>
-
-      <div className="glass-card" style={{ padding: '2rem' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '3rem' }}>
-            <div className="spinner" style={{ margin: '0 auto' }}></div>
-          </div>
-        ) : messages.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {messages.map((msg) => (
-              <div 
-                key={msg.id} 
-                className="glass-card" 
-                style={{ 
-                  padding: '1.25rem', 
-                  background: msg.is_read ? 'rgba(255, 255, 255, 0.03)' : 'rgba(99, 102, 241, 0.05)', 
-                  border: msg.is_read ? '1px solid rgba(255, 255, 255, 0.05)' : '1px solid rgba(99, 102, 241, 0.2)',
-                  borderLeft: msg.is_read ? '1px solid rgba(255, 255, 255, 0.05)' : '4px solid var(--color-primary, #6366f1)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'start',
-                  gap: '1rem'
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '0.95rem' }}>
-                      Admin: {msg.sender_name || 'System'}
-                    </span>
-                    {!msg.is_read && (
-                      <span style={{ fontSize: '0.7rem', background: '#ef4444', color: 'white', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
-                        New
-                      </span>
-                    )}
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                      • {new Date(msg.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  <p style={{ margin: 0, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
-                    {msg.content}
-                  </p>
-                </div>
-                <button 
-                  className="btn btn-outline" 
-                  style={{ 
-                    padding: '0.4rem', 
-                    minWidth: 'auto', 
-                    borderRadius: '6px', 
-                    color: '#ff4d4f', 
-                    borderColor: 'rgba(255, 77, 79, 0.2)' 
-                  }}
-                  onClick={() => handleDelete(msg.id)}
-                  title="Delete message"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-
-            {hasMore && (
-              <button 
-                className="btn btn-outline" 
-                style={{ alignSelf: 'center', marginTop: '1rem', minWidth: '150px' }} 
-                onClick={() => fetchMessages(messages.length)}
-                disabled={loadingMore}
-              >
-                {loadingMore ? 'Loading...' : 'Load More'}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="empty-state" style={{ padding: '3rem 0' }}>
-            <MessageSquare size={48} className="empty-icon" style={{ opacity: 0.5 }} />
-            <h3>No messages yet</h3>
-            <p>You haven't received any messages from the admin yet.</p>
-          </div>
-        )}
-      </div>
-    </Layout>
-  );
-}
-
-
-// ==============================================================================================================
-// PAGE: ADMIN MESSAGES
-// ==============================================================================================================
-
-export function AdminMessages() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [recipientId, setRecipientId] = useState('');
-  const [content, setContent] = useState('');
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [loadingMessages, setLoadingMessages] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const { showSuccess, showError, ToastComponent } = useToast();
-
-  const fetchUsers = async () => {
-    try {
-      const data = await api.adminGetUsers();
-      // Filter out admin users
-      setUsers(data.filter(u => u.role === 'user' && u.is_active));
-    } catch (err: any) {
-      console.error(err);
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
-  const fetchSentMessages = async (skipCount = 0) => {
-    try {
-      if (skipCount === 0) {
-        setLoadingMessages(true);
-      } else {
-        setLoadingMore(true);
-      }
-      const data = await api.getSentMessages(5, skipCount);
-      if (skipCount === 0) {
-        setMessages(data);
-      } else {
-        setMessages((prev) => [...prev, ...data]);
-      }
-      setHasMore(data.length === 5);
-    } catch (err: any) {
-      showError(err.message || 'Failed to load sent messages');
-    } finally {
-      setLoadingMessages(false);
-      setLoadingMore(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchUsers();
-    fetchSentMessages(0);
-  }, []);
-
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!recipientId) {
-      showError('Please select a recipient');
-      return;
-    }
-    if (!content.trim()) {
-      showError('Please type a message');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const newMsg = await api.sendMessage(Number(recipientId), content.trim());
-      showSuccess('Message sent successfully!');
-      setContent('');
-      // Prepend to messages list
-      setMessages(prev => [newMsg, ...prev]);
-    } catch (err: any) {
-      showError(err.message || 'Failed to send message');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (messageId: number) => {
-    if (!window.confirm('Are you sure you want to delete this message?')) return;
-    try {
-      await api.deleteMessage(messageId);
-      setMessages((prev) => prev.filter((m) => m.id !== messageId));
-      showSuccess('Message deleted successfully');
-    } catch (err: any) {
-      showError(err.message || 'Failed to delete message');
-    }
-  };
-
-  return (
-    <Layout>
-      {ToastComponent}
-      <div className="page-header">
-        <div className="page-title-section">
-          <h1 className="page-title">Admin Messaging</h1>
-          <span className="page-subtitle">Send guidelines or direct feedback to individual team members.</span>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem', alignItems: 'start' }}>
-        
-        {/* SEND MESSAGE FORM */}
-        <div className="glass-card" style={{ padding: '1.5rem' }}>
-          <h3 className="section-title" style={{ marginTop: 0, marginBottom: '1.25rem' }}>
-            <Send size={18} /> Send New Message
-          </h3>
-          <form onSubmit={handleSend}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="recipient">Recipient User</label>
-              {loadingUsers ? (
-                <div style={{ padding: '0.5rem 0' }}>Loading users...</div>
-              ) : (
-                <select
-                  id="recipient"
-                  className="form-input form-select"
-                  value={recipientId}
-                  onChange={(e) => setRecipientId(e.target.value)}
-                  disabled={submitting}
-                >
-                  <option value="">-- Select Recipient User --</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name} (@{u.username})
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="content">Message Content</label>
-              <textarea
-                id="content"
-                rows={5}
-                placeholder="Type your message here..."
-                className="form-input"
-                style={{ resize: 'vertical', minHeight: '100px' }}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              className="btn btn-primary" 
-              style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', height: '42px' }}
-              disabled={submitting || loadingUsers}
-            >
-              <Send size={16} />
-              {submitting ? 'Sending...' : 'Send Message'}
-            </button>
-          </form>
-        </div>
-
-        {/* RECENTLY SENT LIST */}
-        <div className="glass-card" style={{ padding: '1.5rem' }}>
-          <h3 className="section-title" style={{ marginTop: 0, marginBottom: '1.25rem' }}>
-            <MessageSquare size={18} /> Recently Sent
-          </h3>
-          
-          {loadingMessages ? (
-            <div style={{ textAlign: 'center', padding: '2rem' }}>
-              <div className="spinner" style={{ margin: '0 auto' }}></div>
-            </div>
-          ) : messages.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {messages.map((msg) => (
-                <div 
-                  key={msg.id} 
-                  className="glass-card" 
-                  style={{ 
-                    padding: '1rem', 
-                    background: 'rgba(255, 255, 255, 0.02)', 
-                    border: '1px solid rgba(255, 255, 255, 0.04)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'start',
-                    gap: '0.75rem'
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--color-secondary)', fontSize: '0.85rem' }}>
-                        To: {msg.recipient_name || 'User'}
-                      </span>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                        {new Date(msg.created_at).toLocaleString()}
-                      </span>
-                    </div>
-                    <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
-                      {msg.content}
-                    </p>
-                  </div>
-                  <button 
-                    className="btn btn-outline" 
-                    style={{ 
-                      padding: '0.3rem', 
-                      minWidth: 'auto', 
-                      borderRadius: '5px', 
-                      color: '#ff4d4f', 
-                      borderColor: 'rgba(255, 77, 79, 0.15)',
-                      marginTop: '0.2rem'
-                    }}
-                    onClick={() => handleDelete(msg.id)}
-                    title="Delete message"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-
-              {hasMore && (
-                <button 
-                  className="btn btn-outline" 
-                  style={{ alignSelf: 'center', marginTop: '0.5rem', width: '100%', fontSize: '0.85rem' }} 
-                  onClick={() => fetchSentMessages(messages.length)}
-                  disabled={loadingMore}
-                >
-                  {loadingMore ? 'Loading...' : 'Load More'}
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="empty-state" style={{ padding: '2rem 0' }}>
-              <MessageSquare size={36} className="empty-icon" style={{ opacity: 0.4 }} />
-              <p style={{ fontSize: '0.9rem', margin: '0.5rem 0 0 0' }}>No sent messages found.</p>
-            </div>
-          )}
-        </div>
-
-      </div>
-    </Layout>
-  );
-}
-
-
-// ==============================================================================================================
 // MAIN ROOT APP COMPONENT
 // ============================================================================
 
@@ -4576,11 +4340,7 @@ export default function App() {
             </ProtectedRoute>
           } />
 
-          <Route path="/messages" element={
-            <ProtectedRoute>
-              <UserMessages />
-            </ProtectedRoute>
-          } />
+          // /messages route removed
 
           {/* ADMIN ONLY ROUTES */}
           <Route path="/admin/dashboard" element={
@@ -4613,11 +4373,7 @@ export default function App() {
             </ProtectedRoute>
           } />
 
-          <Route path="/admin/messages" element={
-            <ProtectedRoute adminOnly={true}>
-              <AdminMessages />
-            </ProtectedRoute>
-          } />
+          // /admin/messages route removed
 
           {/* FALLBACK REDIRECTS */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
