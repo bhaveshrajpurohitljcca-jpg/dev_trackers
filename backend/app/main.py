@@ -997,15 +997,31 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
 
 @app.get(f"{settings.API_V1_STR}/showcase")
 def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    # 1. Recent Projects
+    today = get_ist_date()
+    
+    # 1. Recent Projects (uploaded/started within last 5 days)
+    five_days_ago = today - timedelta(days=5)
     projects = (
         db.query(models.Project)
+        .filter(models.Project.start_date >= five_days_ago)
         .order_by(models.Project.id.desc())
-        .limit(8)
         .all()
     )
     serialized_projects = []
     for p in projects:
+        # Serialize project development logs
+        serialized_logs = []
+        for log in p.logs:
+            serialized_logs.append({
+                "id": log.id,
+                "hours": log.hours,
+                "minutes": log.minutes,
+                "description": log.description,
+                "logged_at": log.logged_at.isoformat()
+            })
+        # Sort logs by date descending
+        serialized_logs.sort(key=lambda x: x["logged_at"], reverse=True)
+
         serialized_projects.append({
             "id": p.id,
             "user_name": p.user.full_name,
@@ -1018,14 +1034,16 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
             "hours_invested": round(p.hours_invested_hours + p.hours_invested_minutes / 60.0, 2),
             "hours": p.hours_invested_hours,
             "minutes": p.hours_invested_minutes,
-            "date": p.end_date.isoformat() if p.end_date else (p.start_date.isoformat() if p.start_date else None)
+            "date": p.end_date.isoformat() if p.end_date else (p.start_date.isoformat() if p.start_date else None),
+            "logs": serialized_logs
         })
 
-    # 2. Topic/Technology completions
+    # 2. Topic/Technology completions (completed within last 3 days)
+    three_days_ago = today - timedelta(days=3)
     completions = (
         db.query(models.CompletedTopic)
+        .filter(models.CompletedTopic.completed_at >= datetime.combine(three_days_ago, datetime.min.time()))
         .order_by(models.CompletedTopic.completed_at.desc())
-        .limit(8)
         .all()
     )
     serialized_completions = []
@@ -1039,12 +1057,15 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
             "completed_at": c.completed_at.isoformat()
         })
 
-    # 3. Daily Kings (work logs >= 2.5 hours)
+    # 3. Daily Kings (work logs >= 2.5 hours within last 3 days, date >= today - 2 days)
+    three_days_ago_date = today - timedelta(days=2)
     daily_logs = (
         db.query(models.DailyLog)
-        .filter((models.DailyLog.hours * 60 + models.DailyLog.minutes) >= 150)
+        .filter(
+            models.DailyLog.date >= three_days_ago_date,
+            (models.DailyLog.hours * 60 + models.DailyLog.minutes) >= 150
+        )
         .order_by(models.DailyLog.date.desc(), models.DailyLog.created_at.desc())
-        .limit(8)
         .all()
     )
     GRACE_WORDS = [
@@ -1071,16 +1092,14 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
             "grace_word": grace_word
         })
 
-    # 4. Consistency Champions (High consistency chart data over last 7 days)
-    today = get_ist_date()
-    seven_days_ago = today - timedelta(days=6)
-    
+    # 4. Consistency Champions (averaging >= 1 hour 20 minutes/day over last 5 days)
+    five_days_ago_date = today - timedelta(days=4)
     active_users = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).all()
-    date_list = [seven_days_ago + timedelta(days=i) for i in range(7)]
+    date_list = [five_days_ago_date + timedelta(days=i) for i in range(5)]
     date_labels = [d.strftime("%a") for d in date_list]
     
     recent_logs = db.query(models.DailyLog).filter(
-        models.DailyLog.date >= seven_days_ago,
+        models.DailyLog.date >= five_days_ago_date,
         models.DailyLog.date <= today
     ).all()
     
@@ -1093,32 +1112,31 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
     serialized_champions = []
     for u in active_users:
         daily_minutes_dict = user_daily_minutes[u.id]
-        daily_hours_list = [round(daily_minutes_dict[d] / 60.0, 2) for d in date_list]
-        heavy_days_count = sum(1 for d in date_list if daily_minutes_dict[d] >= 100)
-        total_week_hours = sum(daily_hours_list)
+        total_minutes = sum(daily_minutes_dict.values())
+        avg_minutes = total_minutes / 5.0
         
-        if total_week_hours > 0:
+        # Filter: daily average of at least 80 minutes (1h 20m)
+        if avg_minutes >= 80:
+            daily_hours_list = [round(daily_minutes_dict[d] / 60.0, 2) for d in date_list]
             serialized_champions.append({
                 "user_id": u.id,
                 "user_name": u.full_name,
                 "username": u.username,
-                "heavy_days_count": heavy_days_count,
-                "total_hours": round(total_week_hours, 2),
+                "total_hours": round(total_minutes / 60.0, 2),
+                "average_hours": round(avg_minutes / 60.0, 2),
                 "chart_data": {
                     "labels": date_labels,
                     "values": daily_hours_list
                 }
             })
             
-    serialized_champions.sort(key=lambda x: (x["heavy_days_count"], x["total_hours"]), reverse=True)
-    serialized_champions = serialized_champions[:6]
+    serialized_champions.sort(key=lambda x: x["average_hours"], reverse=True)
 
-    # 5. Streak Stars
+    # 5. Streak Stars (streaks >= 3 days)
     streaks = (
         db.query(models.Streak)
-        .filter(models.Streak.current_streak >= 1)
+        .filter(models.Streak.current_streak >= 3)
         .order_by(models.Streak.current_streak.desc())
-        .limit(6)
         .all()
     )
     serialized_streaks = []

@@ -2397,13 +2397,13 @@ export function Leaderboard() {
 export function Gallery() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'canvas'>('canvas');
   const [coords, setCoords] = useState<{[key: string]: {x: number, y: number}}>({});
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [dragInitial, setDragInitial] = useState({ x: 0, y: 0 });
   const [particles, setParticles] = useState<{id: number, char: string, x: number, y: number, dx: number, dy: number, dr: number}[]>([]);
+  const [selectedProject, setSelectedProject] = useState<any | null>(null);
   
   const canvasRef = React.useRef<HTMLDivElement>(null);
 
@@ -2453,25 +2453,14 @@ export function Gallery() {
     return list.sort((a, b) => getSortTime(b) - getSortTime(a));
   }, [data]);
 
-  const filteredItems = useMemo(() => {
-    if (activeFilter === 'all') return items;
-    return items.filter(item => {
-      if (activeFilter === 'projects') return item.type === 'project';
-      if (activeFilter === 'completions') return item.type === 'completion';
-      if (activeFilter === 'kings') return item.type === 'king';
-      if (activeFilter === 'streaks') return item.type === 'streak' || item.type === 'champion';
-      return true;
-    });
-  }, [items, activeFilter]);
-
   // Initialize coordinates for canvas view
   useEffect(() => {
-    if (filteredItems.length > 0 && viewMode === 'canvas') {
+    if (items.length > 0 && viewMode === 'canvas') {
       const newCoords = { ...coords };
       let changed = false;
       const cols = Math.max(1, Math.floor((window.innerWidth - 320) / 360));
       
-      filteredItems.forEach((item, idx) => {
+      items.forEach((item, idx) => {
         if (!newCoords[item.uniqueId]) {
           const col = idx % cols;
           const row = Math.floor(idx / cols);
@@ -2486,12 +2475,12 @@ export function Gallery() {
         setCoords(newCoords);
       }
     }
-  }, [filteredItems, viewMode]);
+  }, [items, viewMode]);
 
   const handleTidyUp = () => {
     const newCoords: {[key: string]: {x: number, y: number}} = {};
     const cols = Math.max(1, Math.floor((window.innerWidth - 320) / 360));
-    filteredItems.forEach((item, idx) => {
+    items.forEach((item, idx) => {
       const col = idx % cols;
       const row = Math.floor(idx / cols);
       newCoords[item.uniqueId] = {
@@ -2515,7 +2504,6 @@ export function Gallery() {
     const dy = e.clientY - dragStart.y;
     const containerRect = canvasRef.current.getBoundingClientRect();
     
-    // Constrain card inside canvas
     const nextX = Math.max(0, Math.min(containerRect.width - 320, dragInitial.x + dx));
     const nextY = Math.max(0, Math.min(containerRect.height - 250, dragInitial.y + dy));
     
@@ -2532,7 +2520,7 @@ export function Gallery() {
   const handleHighFive = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
-    const y = rect.top + window.scrollY; // adjust for scroll position
+    const y = rect.top + window.scrollY;
     const emojis = ['🎉', '🔥', '👏', '🚀', '⭐', '🙌', '💯', '✨'];
     
     const newParticles = Array.from({ length: 6 }).map((_, i) => ({
@@ -2578,7 +2566,7 @@ export function Gallery() {
             <h3 className="card-title">{item.name}</h3>
             <p className="card-desc">{item.description || 'No description provided.'}</p>
             <div className="grace-text" style={{ borderColor: 'var(--color-primary)' }}>
-              🎯 Invested: {item.hours}h {item.minutes}m of dedicated building.
+              🎯 Invested: {item.hours}h {item.minutes}m of building.
             </div>
             <div className="card-meta">
               <div className="card-avatar">{initials}</div>
@@ -2650,10 +2638,10 @@ export function Gallery() {
               <span className="badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
                 Consistency Champion
               </span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Weekly Grind</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>5-Day Grind</span>
             </div>
-            <h3 className="card-title" style={{ fontSize: '0.95rem' }}>Active on {item.heavy_days_count} days this week</h3>
-            <p className="card-desc" style={{ fontSize: '0.8rem' }}>Logged at least 1h 40m on {item.heavy_days_count} separate days. Total: {item.total_hours} hrs.</p>
+            <h3 className="card-title" style={{ fontSize: '0.95rem' }}>Averages {item.average_hours}h/day</h3>
+            <p className="card-desc" style={{ fontSize: '0.8rem' }}>Logged a total of {item.total_hours} hours over the last 5 days. Daily target consistency maintained!</p>
             
             {/* SVG MINI-CHART */}
             <div className="mini-chart">
@@ -2668,7 +2656,7 @@ export function Gallery() {
                   const vals = item.chart_data?.values || [];
                   const maxVal = Math.max(2.5, ...vals);
                   const points = vals.map((v: number, idx: number) => {
-                    const x = idx * 38 + 20;
+                    const x = idx * 48 + 20;
                     const y = 50 - (v / maxVal) * 40;
                     return { x, y, val: v };
                   });
@@ -2750,25 +2738,7 @@ export function Gallery() {
         </div>
 
         {/* CONTROLS BAR */}
-        <div className="gallery-controls">
-          <div className="gallery-filters">
-            <button className={`filter-btn ${activeFilter === 'all' ? 'active' : ''}`} onClick={() => setActiveFilter('all')}>
-              All Achievements
-            </button>
-            <button className={`filter-btn ${activeFilter === 'projects' ? 'active' : ''}`} onClick={() => setActiveFilter('projects')}>
-              Projects Showcase
-            </button>
-            <button className={`filter-btn ${activeFilter === 'completions' ? 'active' : ''}`} onClick={() => setActiveFilter('completions')}>
-              Milestones
-            </button>
-            <button className={`filter-btn ${activeFilter === 'kings' ? 'active' : ''}`} onClick={() => setActiveFilter('kings')}>
-              Daily Kings (&gt;= 2.5h)
-            </button>
-            <button className={`filter-btn ${activeFilter === 'streaks' ? 'active' : ''}`} onClick={() => setActiveFilter('streaks')}>
-              Streaks & Consistency
-            </button>
-          </div>
-
+        <div className="gallery-controls" style={{ justifyContent: 'flex-end' }}>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             {viewMode === 'canvas' && (
               <button className="btn btn-secondary" onClick={handleTidyUp} style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
@@ -2787,21 +2757,38 @@ export function Gallery() {
         </div>
 
         {/* RENDER VIEW */}
-        {filteredItems.length === 0 ? (
+        {items.length === 0 ? (
           <div className="glass-card empty-state" style={{ padding: '4rem 2rem' }}>
             <Award size={48} className="empty-icon" />
-            <h3>No achievements in this category yet</h3>
+            <h3>No recent achievements to showcase yet</h3>
             <p>Keep logging your hours, finishing roadmap topics, and completing projects to showcase your hard work!</p>
           </div>
         ) : viewMode === 'grid' ? (
           <div className="gallery-grid">
-            {filteredItems.map(item => (
-              <div key={item.uniqueId} className={`showcase-card ${item.type}-card`}>
+            {items.map(item => (
+              <div 
+                key={item.uniqueId} 
+                className={`showcase-card ${item.type}-card`}
+                style={{ cursor: item.type === 'project' ? 'pointer' : 'default' }}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('.highfive-btn') || (e.target as HTMLElement).closest('.btn-secondary') || (e.target as HTMLElement).closest('a')) {
+                    return;
+                  }
+                  if (item.type === 'project') {
+                    setSelectedProject(item);
+                  }
+                }}
+              >
                 {renderCardContent(item)}
                 <div className="card-action-row">
                   <button className="highfive-btn" onClick={handleHighFive}>
                     👏 High Five
                   </button>
+                  {item.type === 'project' && (
+                    <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600 }} onClick={() => setSelectedProject(item)}>
+                      🔍 Details
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -2813,13 +2800,13 @@ export function Gallery() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            style={{ height: `${Math.max(700, Math.ceil(filteredItems.length / 3) * 270 + 150)}px` }}
+            style={{ height: `${Math.max(700, Math.ceil(items.length / 3) * 270 + 150)}px` }}
           >
             <div className="canvas-instruction">
               <Sliders size={14} /> Drag elements by their top headers to arrange your showcase zone!
             </div>
             
-            {filteredItems.map(item => {
+            {items.map(item => {
               const isDragging = draggedId === item.uniqueId;
               const xCoord = coords[item.uniqueId]?.x ?? 20;
               const yCoord = coords[item.uniqueId]?.y ?? 80;
@@ -2831,7 +2818,16 @@ export function Gallery() {
                   style={{
                     transform: `translate3d(${xCoord}px, ${yCoord}px, 0)`,
                     transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.19, 1, 0.22, 1)',
-                    zIndex: isDragging ? 100 : undefined
+                    zIndex: isDragging ? 100 : undefined,
+                    cursor: isDragging ? 'grabbing' : (item.type === 'project' ? 'pointer' : 'grab')
+                  }}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('.highfive-btn') || (e.target as HTMLElement).closest('.btn-secondary') || (e.target as HTMLElement).closest('a') || (e.target as HTMLElement).closest('.card-drag-handle')) {
+                      return;
+                    }
+                    if (item.type === 'project') {
+                      setSelectedProject(item);
+                    }
                   }}
                 >
                   <div className="card-drag-handle" onMouseDown={(e) => handleMouseDown(e, item.uniqueId)}>
@@ -2842,6 +2838,11 @@ export function Gallery() {
                     <button className="highfive-btn" onClick={handleHighFive}>
                       👏 High Five
                     </button>
+                    {item.type === 'project' && (
+                      <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600 }} onClick={() => setSelectedProject(item)}>
+                        🔍 Details
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -2849,6 +2850,86 @@ export function Gallery() {
           </div>
         )}
       </div>
+
+      {/* PROJECT DETAILS MODAL OVERLAY */}
+      {selectedProject && (
+        <div className="project-detail-overlay" onClick={() => setSelectedProject(null)}>
+          <div className="project-detail-content" onClick={(e) => e.stopPropagation()}>
+            <div className="project-detail-header">
+              <div className="project-detail-title-section">
+                <span className={`badge ${selectedProject.status === 'Completed' ? 'badge-completed' : 'badge-active'}`} style={{ width: 'fit-content' }}>
+                  {selectedProject.status}
+                </span>
+                <h2 className="project-detail-title">{selectedProject.name}</h2>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Developer: <strong>{selectedProject.user_name}</strong> (@{selectedProject.username})
+                </span>
+              </div>
+              <button className="btn-close" onClick={() => setSelectedProject(null)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="project-detail-stats">
+              <div className="project-detail-stat-card">
+                <span className="project-detail-stat-label">Total Invested</span>
+                <span className="project-detail-stat-value">{selectedProject.hours}h {selectedProject.minutes}m</span>
+              </div>
+              <div className="project-detail-stat-card" style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="project-detail-stat-label">GitHub URL</span>
+                <span className="project-detail-stat-value" style={{ fontSize: '0.85rem' }}>
+                  {selectedProject.github_url ? (
+                    <a href={selectedProject.github_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
+                      Open Code ↗
+                    </a>
+                  ) : 'Not Linked'}
+                </span>
+              </div>
+              <div className="project-detail-stat-card">
+                <span className="project-detail-stat-label">Host URL</span>
+                <span className="project-detail-stat-value" style={{ fontSize: '0.85rem' }}>
+                  {selectedProject.host_url ? (
+                    <a href={selectedProject.host_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-secondary)', textDecoration: 'none' }}>
+                      Live Demo ↗
+                    </a>
+                  ) : 'Not Linked'}
+                </span>
+              </div>
+            </div>
+
+            <div className="project-detail-section">
+              <span className="project-detail-section-title">About Project</span>
+              <p className="project-detail-desc">{selectedProject.description || 'No description provided for this project.'}</p>
+            </div>
+
+            {selectedProject.date && (
+              <div className="project-detail-section">
+                <span className="project-detail-section-title">Launch Date</span>
+                <p className="project-detail-desc" style={{ fontSize: '0.9rem' }}>{formatDate(selectedProject.date)}</p>
+              </div>
+            )}
+
+            <div className="project-detail-section">
+              <span className="project-detail-section-title">Development Log Timeline</span>
+              {selectedProject.logs && selectedProject.logs.length > 0 ? (
+                <div className="project-logs-timeline">
+                  {selectedProject.logs.map((log: any) => (
+                    <div key={log.id} className="project-log-item">
+                      <div className="project-log-item-header">
+                        <span className="project-log-item-time">{log.hours}h {log.minutes}m logged</span>
+                        <span className="project-log-item-date">{formatDate(log.logged_at)}</span>
+                      </div>
+                      <p className="project-log-item-desc">{log.description}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="project-detail-desc" style={{ fontStyle: 'italic', fontSize: '0.85rem' }}>No development logs have been recorded for this project yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* RENDER FLOATING PARTICLES */}
       {particles.map(p => (
