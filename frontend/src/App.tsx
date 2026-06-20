@@ -2397,7 +2397,8 @@ export function Leaderboard() {
 export function Gallery() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'grid' | 'canvas'>('canvas');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [viewMode, setViewMode] = useState<'grid' | 'canvas'>(window.innerWidth < 768 ? 'grid' : 'canvas');
   const [coords, setCoords] = useState<{[key: string]: {x: number, y: number}}>({});
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -2406,6 +2407,18 @@ export function Gallery() {
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
   
   const canvasRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
+        setViewMode('grid');
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchShowcase = async () => {
     try {
@@ -2643,9 +2656,8 @@ export function Gallery() {
             <h3 className="card-title" style={{ fontSize: '0.95rem' }}>Averages {item.average_hours}h/day</h3>
             <p className="card-desc" style={{ fontSize: '0.8rem' }}>Logged a total of {item.total_hours} hours over the last 5 days. Daily target consistency maintained!</p>
             
-            {/* SVG MINI-CHART */}
             <div className="mini-chart">
-              <svg width="270" height="70" viewBox="0 0 270 70">
+              <svg width="100%" height="70" viewBox="0 0 270 70">
                 <defs>
                   <linearGradient id={`grad-${item.user_id}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.4" />
@@ -2738,21 +2750,23 @@ export function Gallery() {
         </div>
 
         {/* CONTROLS BAR */}
-        <div className="gallery-controls" style={{ justifyContent: 'flex-end' }}>
+        <div className="gallery-controls" style={{ justifyContent: 'flex-end', display: isMobile ? 'none' : 'flex' }}>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            {viewMode === 'canvas' && (
+            {viewMode === 'canvas' && !isMobile && (
               <button className="btn btn-secondary" onClick={handleTidyUp} style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
                 Tidy Up Board
               </button>
             )}
-            <div className="view-toggle">
-              <button className={`toggle-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>
-                Grid View
-              </button>
-              <button className={`toggle-btn ${viewMode === 'canvas' ? 'active' : ''}`} onClick={() => setViewMode('canvas')}>
-                Canvas Zone
-              </button>
-            </div>
+            {!isMobile && (
+              <div className="view-toggle">
+                <button className={`toggle-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>
+                  Grid View
+                </button>
+                <button className={`toggle-btn ${viewMode === 'canvas' ? 'active' : ''}`} onClick={() => setViewMode('canvas')}>
+                  Canvas Zone
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
