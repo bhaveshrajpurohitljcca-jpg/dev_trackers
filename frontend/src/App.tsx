@@ -814,11 +814,12 @@ export function AdminDashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState<string | null>(null);
+  const [weekOffset, setWeekOffset] = useState<number>(0);
   const { showSuccess, showError, ToastComponent } = useToast();
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = async (offset = weekOffset) => {
     try {
-      const dbData = await api.adminGetDashboard();
+      const dbData = await api.adminGetDashboard(offset);
       setData(dbData);
     } catch (err) {
       console.error(err);
@@ -828,15 +829,16 @@ export function AdminDashboard() {
   };
 
   useEffect(() => {
-    fetchDashboard();
-  }, []);
+    setLoading(true);
+    fetchDashboard(weekOffset);
+  }, [weekOffset]);
 
   const handleTriggerReminders = async () => {
     setTriggering('reminder');
     try {
       const res = await api.triggerReminders();
       showSuccess(res.detail);
-      fetchDashboard();
+      fetchDashboard(weekOffset);
     } catch (err: any) {
       showError(err.message || 'Failed to trigger reminders');
     } finally {
@@ -849,7 +851,7 @@ export function AdminDashboard() {
     try {
       const res = await api.triggerDeadlineCheck();
       showSuccess(res.detail);
-      fetchDashboard();
+      fetchDashboard(weekOffset);
     } catch (err: any) {
       showError(err.message || 'Failed to trigger deadline audit');
     } finally {
@@ -891,7 +893,31 @@ export function AdminDashboard() {
             Admin Control Panel — Monitor activity, send notifications, and configure global system rules.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '0.5rem' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600 }}>Week:</span>
+            <select
+              value={weekOffset}
+              onChange={(e) => setWeekOffset(parseInt(e.target.value))}
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '10px',
+                padding: '0.6rem 1.2rem',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value={0} style={{ background: '#1e1b4b' }}>Current Week</option>
+              <option value={1} style={{ background: '#1e1b4b' }}>1 Week Ago</option>
+              <option value={2} style={{ background: '#1e1b4b' }}>2 Weeks Ago</option>
+              <option value={3} style={{ background: '#1e1b4b' }}>3 Weeks Ago</option>
+              <option value={4} style={{ background: '#1e1b4b' }}>4 Weeks Ago</option>
+            </select>
+          </div>
           <button 
             className="btn btn-secondary" 
             onClick={handleTriggerReminders}
@@ -1036,14 +1062,15 @@ export function AdminDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
               {data?.user_weekly_progress?.length > 0 ? (
                 data.user_weekly_progress.map((userProg: any, idx: number) => {
-                  const metTarget = userProg.weekly_work_hours >= 10;
+                  const targetHours = userProg.weekly_target_hours || 10;
+                  const metTarget = userProg.weekly_work_hours >= targetHours;
                   return (
                     <div key={idx} style={{ padding: '0.75rem', backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                         <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{userProg.full_name}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                            {formatHours(userProg.weekly_work_hours)} / 10 hrs
+                            {formatHours(userProg.weekly_work_hours)} / {targetHours} hrs
                           </span>
                           <span className={`badge ${metTarget ? 'badge-active' : 'badge-other'}`} style={{ 
                             fontSize: '0.75rem', 
@@ -1060,7 +1087,7 @@ export function AdminDashboard() {
                       <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden' }}>
                         <div 
                           style={{ 
-                            width: `${Math.min((userProg.weekly_work_hours / 10) * 100, 100)}%`, 
+                            width: `${Math.min((userProg.weekly_work_hours / targetHours) * 100, 100)}%`, 
                             height: '100%', 
                             backgroundColor: metTarget ? 'var(--color-success)' : 'var(--color-warning)',
                             transition: 'width 0.3s ease'
@@ -2548,6 +2575,7 @@ export function AdminUsers() {
   const [primaryTeam, setPrimaryTeam] = useState('');
   const [secondaryTeam, setSecondaryTeam] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [weeklyTargetHours, setWeeklyTargetHours] = useState<number>(10);
   const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
 
@@ -2575,6 +2603,7 @@ export function AdminUsers() {
     setPrimaryTeam('');
     setSecondaryTeam('');
     setIsActive(true);
+    setWeeklyTargetHours(10);
     setShowCreatePassword(false);
     setShowModal('create');
   };
@@ -2588,6 +2617,7 @@ export function AdminUsers() {
     setPrimaryTeam(u.primary_team || '');
     setSecondaryTeam(u.secondary_team || '');
     setIsActive(u.is_active);
+    setWeeklyTargetHours(u.weekly_target_hours || 10);
     setShowModal('edit');
   };
 
@@ -2627,7 +2657,8 @@ export function AdminUsers() {
         role,
         primary_team: primaryTeam || null,
         secondary_team: secondaryTeam || null,
-        is_active: isActive
+        is_active: isActive,
+        weekly_target_hours: weeklyTargetHours
       });
       showSuccess('User successfully created!');
       setShowModal(null);
@@ -2656,7 +2687,8 @@ export function AdminUsers() {
         role,
         primary_team: primaryTeam || null,
         secondary_team: secondaryTeam || null,
-        is_active: isActive
+        is_active: isActive,
+        weekly_target_hours: weeklyTargetHours
       });
       showSuccess('User profile successfully updated!');
       setShowModal(null);
@@ -2781,6 +2813,20 @@ export function AdminUsers() {
                   <input id="new-secondary-team" type="text" className="form-input" placeholder="e.g. Frontend Dev" value={secondaryTeam} onChange={(e) => setSecondaryTeam(e.target.value)} disabled={submitting} />
                 </div>
               </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="new-target-hours">Weekly Target Hours</label>
+                <input 
+                  id="new-target-hours" 
+                  type="number" 
+                  className="form-input" 
+                  min={1} 
+                  max={168} 
+                  value={weeklyTargetHours} 
+                  onChange={(e) => setWeeklyTargetHours(parseInt(e.target.value) || 10)} 
+                  disabled={submitting} 
+                  required 
+                />
+              </div>
               <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <input id="new-active" type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} disabled={submitting} />
                 <label className="form-label" htmlFor="new-active" style={{ cursor: 'pointer' }}>Is Active Profile</label>
@@ -2831,6 +2877,20 @@ export function AdminUsers() {
                   <label className="form-label" htmlFor="edit-secondary-team">Secondary Team (Optional)</label>
                   <input id="edit-secondary-team" type="text" className="form-input" value={secondaryTeam} onChange={(e) => setSecondaryTeam(e.target.value)} disabled={submitting} />
                 </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-target-hours">Weekly Target Hours</label>
+                <input 
+                  id="edit-target-hours" 
+                  type="number" 
+                  className="form-input" 
+                  min={1} 
+                  max={168} 
+                  value={weeklyTargetHours} 
+                  onChange={(e) => setWeeklyTargetHours(parseInt(e.target.value) || 10)} 
+                  disabled={submitting} 
+                  required 
+                />
               </div>
               <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <input id="edit-active" type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} disabled={submitting} />
@@ -3397,10 +3457,18 @@ export function AdminSettings() {
   const [selectedLogIds, setSelectedLogIds] = useState<number[]>([]);
   const [deletingLogs, setDeletingLogs] = useState(false);
 
+  // Developer Target configuration states
+  const [users, setUsers] = useState<User[]>([]);
+  const [targetUserId, setTargetUserId] = useState<number | ''>('');
+  const [targetHours, setTargetHours] = useState<number>(10);
+  const [updatingTarget, setUpdatingTarget] = useState(false);
+
   const fetchData = async () => {
     try {
       const s = await api.adminGetSettings();
       const l = await api.adminGetEmailLogs();
+      const u = await api.adminGetUsers();
+      
       setDeadline(s.daily_log_deadline);
       setReminder(s.reminder_time);
       setGrace(s.grace_period_minutes.toString());
@@ -3410,6 +3478,12 @@ export function AdminSettings() {
       setSmtpPassword(s.smtp_password || '');
       setEmailLogs(l);
       setSelectedLogIds([]); // Clear selections on refresh
+      
+      setUsers(u);
+      if (u.length > 0) {
+        setTargetUserId(u[0].id);
+        setTargetHours(u[0].weekly_target_hours || 10);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -3517,6 +3591,41 @@ export function AdminSettings() {
       setSelectedLogIds(selectedLogIds.filter(logId => logId !== id));
     } else {
       setSelectedLogIds([...selectedLogIds, id]);
+    }
+  };
+
+  const handleTargetUserChange = (userId: number) => {
+    setTargetUserId(userId);
+    const selected = users.find(u => u.id === userId);
+    if (selected) {
+      setTargetHours(selected.weekly_target_hours || 10);
+    }
+  };
+
+  const handleSaveTargetHours = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetUserId) return;
+    const selected = users.find(u => u.id === targetUserId);
+    if (!selected) return;
+
+    setUpdatingTarget(true);
+    try {
+      await api.adminUpdateUser(targetUserId, {
+        full_name: selected.full_name,
+        username: selected.username,
+        email: selected.email,
+        role: selected.role,
+        primary_team: selected.primary_team || null,
+        secondary_team: selected.secondary_team || null,
+        is_active: selected.is_active,
+        weekly_target_hours: targetHours
+      });
+      showSuccess(`Weekly target hours updated for ${selected.full_name}!`);
+      setUsers(prev => prev.map(u => u.id === targetUserId ? { ...u, weekly_target_hours: targetHours } : u));
+    } catch (err: any) {
+      showError(err.message || 'Failed to update target hours');
+    } finally {
+      setUpdatingTarget(false);
     }
   };
 
@@ -3685,6 +3794,53 @@ export function AdminSettings() {
             </form>
           </div>
 
+          {/* Developer Weekly Targets Card */}
+          <div className="glass-card section-card">
+            <h3 className="section-title">
+              <Clock size={18} style={{ color: 'var(--color-primary)' }} /> Developer Weekly Targets
+            </h3>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: '1.4' }}>
+              Configure custom weekly target hours for individual developers. The default is 10 hours.
+            </p>
+            
+            <form onSubmit={handleSaveTargetHours}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="target-user-select">Select Developer</label>
+                <select 
+                  id="target-user-select" 
+                  className="form-input form-select" 
+                  value={targetUserId} 
+                  onChange={(e) => handleTargetUserChange(Number(e.target.value))}
+                  disabled={updatingTarget}
+                >
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name} (@{u.username}) — Current: {u.weekly_target_hours || 10}h
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="target-hours-input">Weekly Target Hours</label>
+                <input 
+                  id="target-hours-input"
+                  type="number" 
+                  className="form-input" 
+                  min={1}
+                  max={168}
+                  value={targetHours}
+                  onChange={(e) => setTargetHours(parseInt(e.target.value) || 10)}
+                  disabled={updatingTarget}
+                />
+              </div>
+
+              <button className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} type="submit" disabled={updatingTarget}>
+                {updatingTarget ? 'Saving...' : 'Update Target Hours'}
+              </button>
+            </form>
+          </div>
+
           {/* Broadcast Form Card */}
           <div className="glass-card section-card">
             <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -3837,9 +3993,35 @@ export function AdminPerformance() {
   const [visibleUsers, setVisibleUsers] = useState<Record<number, boolean>>({});
   const { showError, ToastComponent } = useToast();
 
-  const fetchPerformance = async () => {
+  // Filters and tooltips states
+  const getTodayISTString = () => {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  };
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const [perfDate, setPerfDate] = useState<string>(getTodayISTString());
+  const [chartUserFilter, setChartUserFilter] = useState<number | 'all'>('all');
+  const [hoveredPoint, setHoveredPoint] = useState<{
+    x: number;
+    y: number;
+    userName: string;
+    date: string;
+    hours: number;
+    color: string;
+  } | null>(null);
+
+  // Table real-time filters
+  const [selectedTeam, setSelectedTeam] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  // Checklist panel states
+  const [checklistUserId, setChecklistUserId] = useState<number | null>(null);
+  const [checklistProfile, setChecklistProfile] = useState<any>(null);
+  const [checklistLoading, setChecklistLoading] = useState(false);
+
+  const fetchPerformance = async (offset = weekOffset, pDate = perfDate) => {
     try {
-      const res = await api.adminGetPerformance();
+      const res = await api.adminGetPerformance(offset, pDate);
       setData(res);
       // Initialize all users as visible in chart
       if (res && res.users_performance) {
@@ -3857,8 +4039,40 @@ export function AdminPerformance() {
   };
 
   useEffect(() => {
-    fetchPerformance();
-  }, []);
+    setLoading(true);
+    fetchPerformance(weekOffset, perfDate);
+  }, [weekOffset, perfDate]);
+
+  // Set default checklist user
+  useEffect(() => {
+    if (data && data.users_performance && data.users_performance.length > 0 && !checklistUserId) {
+      setChecklistUserId(data.users_performance[0].user_id);
+    }
+  }, [data]);
+
+  // Fetch checklist profile when selected user changes
+  useEffect(() => {
+    const fetchChecklist = async () => {
+      if (!checklistUserId) return;
+      setChecklistLoading(true);
+      try {
+        const p = await api.adminGetUserProfile(checklistUserId);
+        setChecklistProfile(p);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setChecklistLoading(false);
+      }
+    };
+    fetchChecklist();
+  }, [checklistUserId]);
+
+  const isUserVisibleOnChart = (userId: number) => {
+    if (chartUserFilter !== 'all') {
+      return chartUserFilter === userId;
+    }
+    return visibleUsers[userId];
+  };
 
   const toggleUserVisibility = (userId: number) => {
     setVisibleUsers(prev => ({
@@ -3871,10 +4085,24 @@ export function AdminPerformance() {
   if (!data) return <Layout><div className="empty-state"><p>No performance data available.</p></div></Layout>;
 
   // Filtered users for table
-  const filteredUsers = data.users_performance.filter((user: any) =>
-    user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.username.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = data.users_performance.filter((user: any) => {
+    const matchesSearch = user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          user.username.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const userTeams = [];
+    if (user.primary_team) userTeams.push(user.primary_team.toLowerCase());
+    if (user.secondary_team) userTeams.push(user.secondary_team.toLowerCase());
+    const matchesTeam = selectedTeam === 'all' || userTeams.includes(selectedTeam.toLowerCase());
+
+    const matchesStatus = selectedStatus === 'all' ||
+                          (selectedStatus === 'logged' && user.has_logged_today) ||
+                          (selectedStatus === 'not_logged' && !user.has_logged_today);
+
+    const matchesCategory = selectedCategory === 'all' ||
+                            (user.has_logged_today && user.today_log?.category?.toLowerCase() === selectedCategory.toLowerCase());
+
+    return matchesSearch && matchesTeam && matchesStatus && matchesCategory;
+  });
 
   // SVG Chart Configuration
   const days = data.week_days; // ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -3892,7 +4120,7 @@ export function AdminPerformance() {
   // Find max hours logged by any visible user to scale Y axis
   let maxHours = 8; // default minimum Y-max
   data.users_performance.forEach((user: any) => {
-    if (visibleUsers[user.user_id]) {
+    if (isUserVisibleOnChart(user.user_id)) {
       const userMax = Math.max(...user.weekly_hours, 0);
       if (userMax > maxHours) {
         maxHours = userMax;
@@ -3941,11 +4169,69 @@ export function AdminPerformance() {
         
         {/* CHART SECTION */}
         <div className="glass-card" style={{ padding: '1.5rem' }}>
-          <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-            <TrendingUp size={18} /> Current Week Logging (Daily Hours)
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <TrendingUp size={18} /> Daily Logging Hours Chart
+            </h3>
+            
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 600 }}>Week:</span>
+                <select
+                  value={weekOffset}
+                  onChange={(e) => setWeekOffset(parseInt(e.target.value))}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    padding: '0.4rem 0.8rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value={0} style={{ background: '#1e1b4b' }}>Current Week</option>
+                  <option value={1} style={{ background: '#1e1b4b' }}>1 Week Ago</option>
+                  <option value={2} style={{ background: '#1e1b4b' }}>2 Weeks Ago</option>
+                  <option value={3} style={{ background: '#1e1b4b' }}>3 Weeks Ago</option>
+                  <option value={4} style={{ background: '#1e1b4b' }}>4 Weeks Ago</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 600 }}>Developer:</span>
+                <select
+                  value={chartUserFilter}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setChartUserFilter(val === 'all' ? 'all' : Number(val));
+                  }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    padding: '0.4rem 0.8rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="all" style={{ background: '#1e1b4b' }}>All Developers</option>
+                  {data.users_performance.map((u: any) => (
+                    <option key={u.user_id} value={u.user_id} style={{ background: '#1e1b4b' }}>
+                      {u.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
           
-          <div style={{ position: 'relative', width: '100%', overflowX: 'auto' }}>
+          <div style={{ position: 'relative', width: '100%', overflowX: 'visible' }}>
             <svg 
               viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
               width="100%" 
@@ -4016,7 +4302,7 @@ export function AdminPerformance() {
 
               {/* User Line Paths */}
               {data.users_performance.map((user: any, userIdx: number) => {
-                if (!visibleUsers[user.user_id]) return null;
+                if (!isUserVisibleOnChart(user.user_id)) return null;
                 const color = getUserColor(userIdx);
                 
                 // Construct path coordinates
@@ -4051,11 +4337,27 @@ export function AdminPerformance() {
                           key={i} 
                           cx={x} 
                           cy={y} 
-                          r="4" 
+                          r="5" 
                           fill="var(--background-card)" 
                           stroke={color} 
                           strokeWidth="2.5" 
-                          style={{ cursor: 'pointer' }}
+                          style={{ cursor: 'pointer', transition: 'r 0.1s ease' }}
+                          onMouseEnter={(e) => {
+                            const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
+                            if (rect) {
+                              const pageX = e.clientX - rect.left;
+                              const pageY = e.clientY - rect.top;
+                              setHoveredPoint({
+                                x: pageX,
+                                y: pageY,
+                                userName: user.full_name,
+                                date: `${days[i]} ${dates[i] ? dates[i] : ''}`,
+                                hours: val,
+                                color
+                              });
+                            }
+                          }}
+                          onMouseLeave={() => setHoveredPoint(null)}
                         >
                           <title>{`${user.full_name}: ${formatHours(val)} (${days[i]} ${dates[i]})`}</title>
                         </circle>
@@ -4065,68 +4367,213 @@ export function AdminPerformance() {
                 );
               })}
             </svg>
+
+            {hoveredPoint && (
+              <div style={{
+                position: 'absolute',
+                left: `${hoveredPoint.x}px`,
+                top: `${hoveredPoint.y - 75}px`,
+                transform: 'translateX(-50%)',
+                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                border: `1px solid ${hoveredPoint.color}`,
+                borderRadius: '8px',
+                padding: '0.6rem 0.8rem',
+                color: 'var(--text-primary)',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                pointerEvents: 'none',
+                zIndex: 10,
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.5)',
+                minWidth: '130px',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.1s ease'
+              }}>
+                <div style={{ fontWeight: 700, color: hoveredPoint.color, marginBottom: '0.2rem' }}>{hoveredPoint.userName}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{hoveredPoint.date}</div>
+                <div style={{ marginTop: '0.3rem', color: 'var(--color-primary)', fontWeight: 700 }}>
+                  {formatHours(hoveredPoint.hours)}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* LEGEND / USER TOGGLES */}
-          <div style={{ 
-            marginTop: '1.5rem', 
-            paddingTop: '1rem', 
-            borderTop: '1px solid var(--border-color)', 
-            display: 'flex', 
-            flexWrap: 'wrap', 
-            gap: '0.75rem', 
-            justifyContent: 'center' 
-          }}>
-            {data.users_performance.map((user: any, userIdx: number) => {
-              const color = getUserColor(userIdx);
-              const isVisible = visibleUsers[user.user_id];
-              return (
-                <button 
-                  key={user.user_id}
-                  onClick={() => toggleUserVisibility(user.user_id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '8px',
-                    backgroundColor: isVisible ? 'rgba(255,255,255,0.05)' : 'transparent',
-                    border: `1px solid ${isVisible ? color : 'var(--border-color)'}`,
-                    color: isVisible ? 'var(--text-primary)' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <span style={{ 
-                    display: 'inline-block', 
-                    width: '10px', 
-                    height: '10px', 
-                    borderRadius: '50%', 
-                    backgroundColor: color,
-                    border: '1px solid rgba(255,255,255,0.2)'
-                  }} />
-                  {user.full_name}
-                </button>
-              );
-            })}
-          </div>
+          {chartUserFilter === 'all' && (
+            <div style={{ 
+              marginTop: '1.5rem', 
+              paddingTop: '1rem', 
+              borderTop: '1px solid var(--border-color)', 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: '0.75rem', 
+              justifyContent: 'center' 
+            }}>
+              {data.users_performance.map((user: any, userIdx: number) => {
+                const color = getUserColor(userIdx);
+                const isVisible = visibleUsers[user.user_id];
+                return (
+                  <button 
+                    key={user.user_id}
+                    onClick={() => toggleUserVisibility(user.user_id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '8px',
+                      backgroundColor: isVisible ? 'rgba(255,255,255,0.05)' : 'transparent',
+                      border: `1px solid ${isVisible ? color : 'var(--border-color)'}`,
+                      color: isVisible ? 'var(--text-primary)' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span style={{ 
+                      display: 'inline-block', 
+                      width: '10px', 
+                      height: '10px', 
+                      borderRadius: '50%', 
+                      backgroundColor: color,
+                      border: '1px solid rgba(255,255,255,0.2)'
+                    }} />
+                    {user.full_name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* DETAILS TABLE SECTION */}
         <div className="glass-card" style={{ padding: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <h3 className="section-title" style={{ margin: 0 }}>Team Performance & Logs</h3>
-            <div style={{ position: 'relative', minWidth: '240px' }}>
-              <input 
-                type="text" 
-                className="form-input" 
-                placeholder="Search team member..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ height: '38px', paddingRight: '2rem' }}
-              />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <h3 className="section-title" style={{ margin: 0 }}>Team Performance & Logs</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600 }}>Log Date:</span>
+                <input 
+                  type="date" 
+                  className="form-input"
+                  value={perfDate}
+                  onChange={(e) => setPerfDate(e.target.value)}
+                  style={{ 
+                    height: '38px', 
+                    padding: '0.5rem', 
+                    background: 'rgba(255, 255, 255, 0.05)', 
+                    color: 'var(--text-primary)', 
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '10px',
+                    width: '160px'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Real-time Filters Bar */}
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: '1rem', 
+              padding: '1rem', 
+              background: 'rgba(255,255,255,0.01)', 
+              border: '1px solid var(--border-color)', 
+              borderRadius: '12px',
+              alignItems: 'center'
+            }}>
+              {/* Search filter */}
+              <div style={{ position: 'relative', flex: '1 1 200px' }}>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Search team member..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ height: '38px', width: '100%' }}
+                />
+              </div>
+
+              {/* Team filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Team:</span>
+                <select
+                  value={selectedTeam}
+                  onChange={(e) => setSelectedTeam(e.target.value)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    padding: '0.4rem 0.8rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="all" style={{ background: '#1e1b4b' }}>All Teams</option>
+                  {Array.from(new Set(data.users_performance.flatMap((u: any) => {
+                    const teams = [];
+                    if (u.primary_team) teams.push(u.primary_team);
+                    if (u.secondary_team) teams.push(u.secondary_team);
+                    return teams;
+                  }))).map((teamName: any) => (
+                    <option key={teamName} value={teamName} style={{ background: '#1e1b4b' }}>
+                      {teamName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Status:</span>
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    padding: '0.4rem 0.8rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="all" style={{ background: '#1e1b4b' }}>All Status</option>
+                  <option value="logged" style={{ background: '#1e1b4b' }}>Logged</option>
+                  <option value="not_logged" style={{ background: '#1e1b4b' }}>Not Logged</option>
+                </select>
+              </div>
+
+              {/* Category filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Category:</span>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    padding: '0.4rem 0.8rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="all" style={{ background: '#1e1b4b' }}>All Categories</option>
+                  <option value="coding" style={{ background: '#1e1b4b' }}>Coding</option>
+                  <option value="learning" style={{ background: '#1e1b4b' }}>Learning</option>
+                  <option value="nothing today" style={{ background: '#1e1b4b' }}>Nothing Today</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -4135,9 +4582,8 @@ export function AdminPerformance() {
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
                   <th style={{ textAlign: 'left', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>User Details</th>
-                  <th style={{ textAlign: 'center', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>Today's Status</th>
-                  <th style={{ textAlign: 'left', padding: '0.75rem 1rem', color: 'var(--text-secondary)', width: '25%' }}>Today's Work Log</th>
-                  <th style={{ textAlign: 'left', padding: '0.75rem 1rem', color: 'var(--text-secondary)', width: '20%' }}>Technology Progress</th>
+                  <th style={{ textAlign: 'center', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>Status on Date</th>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 1rem', color: 'var(--text-secondary)', width: '40%' }}>Date's Work Log</th>
                   <th style={{ textAlign: 'center', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>Avg Hours/Entry</th>
                   <th style={{ textAlign: 'center', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>Total Logs</th>
                   <th style={{ textAlign: 'right', padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>Total Hours</th>
@@ -4213,42 +4659,9 @@ export function AdminPerformance() {
                             </div>
                           ) : (
                             <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
-                              No log submitted today
+                              No log submitted on this date
                             </span>
                           )}
-                        </td>
-
-                        {/* Technology Progress */}
-                        <td style={{ padding: '1rem', verticalAlign: 'middle' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                              Completed: <span style={{ color: 'var(--color-primary)' }}>{user.completed_techs_count}</span> / {user.total_assigned_techs}
-                            </div>
-                            {user.completed_techs_count > 0 ? (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.25rem' }}>
-                                {user.completed_techs_list.map((techName: string) => (
-                                  <span 
-                                    key={techName} 
-                                    className="badge badge-coding" 
-                                    style={{ 
-                                      fontSize: '0.65rem', 
-                                      textTransform: 'none', 
-                                      padding: '0.15rem 0.4rem', 
-                                      backgroundColor: 'rgba(139, 92, 246, 0.08)',
-                                      color: 'var(--color-primary)',
-                                      border: '1px solid rgba(139, 92, 246, 0.15)'
-                                    }}
-                                  >
-                                    {techName}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontStyle: 'italic' }}>
-                                {user.total_assigned_techs > 0 ? 'Learning in progress...' : 'No roadmaps assigned'}
-                              </span>
-                            )}
-                          </div>
                         </td>
 
                         {/* Average Hours */}
@@ -4270,7 +4683,7 @@ export function AdminPerformance() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                       No team members found matching your search.
                     </td>
                   </tr>
@@ -4278,6 +4691,138 @@ export function AdminPerformance() {
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* SYLLABUS CHECKLIST PANEL */}
+        <div className="glass-card" style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <h3 className="section-title" style={{ margin: 0 }}>Developer Syllabus Progress Checklist</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0.25rem 0 0 0' }}>
+                View detailed roadmap topics checklist and completion dates for the selected developer.
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600 }}>Select Developer:</span>
+              <select
+                value={checklistUserId || ''}
+                onChange={(e) => setChecklistUserId(Number(e.target.value))}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                {data.users_performance.map((u: any) => (
+                  <option key={u.user_id} value={u.user_id} style={{ background: '#1e1b4b' }}>
+                    {u.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {checklistLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+              <div className="spinner"></div>
+            </div>
+          ) : checklistProfile ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
+              {checklistProfile.assigned_technologies?.length > 0 ? (
+                checklistProfile.assigned_technologies.map((tech: any) => (
+                  <div key={tech.id} style={{
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '12px',
+                    padding: '1.25rem',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{tech.name}</h4>
+                        <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{tech.description || 'No description available'}</p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-primary)' }}>
+                          {tech.completed_topics} / {tech.total_topics} Topics ({tech.total_topics > 0 ? Math.round((tech.completed_topics / tech.total_topics) * 100) : 0}%)
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '10px', marginBottom: '1.5rem', overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${tech.total_topics > 0 ? (tech.completed_topics / tech.total_topics) * 100 : 0}%`,
+                        height: '100%',
+                        background: 'linear-gradient(90deg, var(--color-primary) 0%, var(--color-secondary) 100%)',
+                        transition: 'width 0.3s ease'
+                      }} />
+                    </div>
+
+                    {/* Topics Checklist Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
+                      {tech.topics?.map((topic: any, idx: number) => (
+                        <div key={topic.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                          padding: '0.75rem',
+                          backgroundColor: topic.completed ? 'rgba(16, 185, 129, 0.03)' : 'rgba(255, 255, 255, 0.01)',
+                          border: `1px solid ${topic.completed ? 'rgba(16, 185, 129, 0.15)' : 'var(--border-color)'}`,
+                          borderRadius: '8px'
+                        }}>
+                          <div style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            backgroundColor: topic.completed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: topic.completed ? 'var(--color-success)' : 'var(--text-muted)'
+                          }}>
+                            {topic.completed ? <Check size={14} /> : <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--text-muted)' }}></div>}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                            <span style={{ 
+                              fontSize: '0.85rem', 
+                              fontWeight: 600, 
+                              color: topic.completed ? 'var(--text-primary)' : 'var(--text-secondary)',
+                              textDecoration: topic.completed ? 'none' : 'none',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {idx + 1}. {topic.name}
+                            </span>
+                            {topic.completed && topic.completed_at && (
+                              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                Completed: {new Date(topic.completed_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state" style={{ padding: '2rem 0' }}>
+                  <p>No learning roadmaps assigned to this developer.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="empty-state" style={{ padding: '2rem 0' }}>
+              <p>No profile data available.</p>
+            </div>
+          )}
         </div>
 
       </div>

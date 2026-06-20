@@ -13,7 +13,9 @@ export interface User {
   secondary_team?: string | null;
   is_active: boolean;
   created_date: string;
+  weekly_target_hours?: number;
 }
+
 
 export interface Activity {
   id: number;
@@ -353,12 +355,16 @@ export const api = {
     return request<any>('/dashboard');
   },
 
-  async adminGetDashboard(): Promise<any> {
-    return request<any>('/admin/dashboard');
+  async adminGetDashboard(weekOffset: number = 0): Promise<any> {
+    return request<any>(`/admin/dashboard?week_offset=${weekOffset}`);
   },
 
-  async adminGetPerformance(): Promise<any> {
-    return request<any>('/admin/performance');
+  async adminGetPerformance(weekOffset: number = 0, perfDate?: string): Promise<any> {
+    let url = `/admin/performance?week_offset=${weekOffset}`;
+    if (perfDate) {
+      url += `&perf_date=${perfDate}`;
+    }
+    return request<any>(url);
   },
 
   // Email Reminders Triggers

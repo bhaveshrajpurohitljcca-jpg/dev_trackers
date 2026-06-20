@@ -365,6 +365,25 @@ try:
             db_mig.rollback()
         finally:
             db_mig.close()
+
+    # Migrate users table to add weekly_target_hours column if it doesn't exist
+    if "users" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("users")]
+        if "weekly_target_hours" not in columns:
+            db_mig = next(get_db())
+            try:
+                dialect = db_mig.bind.dialect.name
+                if dialect == "sqlite":
+                    db_mig.execute(text("ALTER TABLE users ADD COLUMN weekly_target_hours INTEGER NOT NULL DEFAULT 10"))
+                else:
+                    db_mig.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_target_hours INTEGER NOT NULL DEFAULT 10"))
+                db_mig.commit()
+                print("Added column weekly_target_hours to users table.")
+            except Exception as e:
+                print(f"Error migrating users table: {e}")
+                db_mig.rollback()
+            finally:
+                db_mig.close()
                 
 except Exception as e:
     print(f"Inspector migration error: {e}")
@@ -568,13 +587,26 @@ def admin_get_user_profile(user_id: int, db: Session = Depends(get_db), current_
     assigned_techs = []
     for ut in user.assigned_technologies:
         tech = ut.technology
-        completed_count = sum(1 for t in tech.topics if t.id in completed_topic_ids)
+        
+        # Build detailed topics list
+        topics_list = []
+        for t in tech.topics:
+            comp = next((ct for ct in user.completed_topics if ct.topic_id == t.id), None)
+            topics_list.append({
+                "id": t.id,
+                "name": t.name,
+                "completed": comp is not None,
+                "completed_at": comp.completed_at if comp else None
+            })
+            
+        completed_count = sum(1 for t in topics_list if t["completed"])
         assigned_techs.append({
             "id": tech.id,
             "name": tech.name,
             "description": tech.description,
             "total_topics": len(tech.topics),
-            "completed_topics": completed_count
+            "completed_topics": completed_count,
+            "topics": topics_list
         })
 
     return {
@@ -1086,6 +1118,7 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
         "total_hours": round(total_hours, 4),
         "weekly_hours": round(weekly_hours, 4),
         "monthly_hours": round(monthly_hours, 4),
+        "weekly_target_hours": current_user.weekly_target_hours,
         "today_hours": round(today_hours, 4),
         "today_coding_hours": round(today_coding_hours, 4),
         "today_learning_hours": round(today_learning_hours, 4),
@@ -1108,8 +1141,8 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
 # ==========================================
 
 @app.get(f"{settings.API_V1_STR}/admin/dashboard")
-def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
-    today = get_ist_date()
+def get_admin_dashboard(week_offset: int = 0, db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
+    today = get_ist_date() - timedelta(weeks=week_offset)
     start_of_week = today - timedelta(days=(today.weekday() + 1) % 7) # Sunday
     start_of_month = today.replace(day=1)
     
@@ -1131,7 +1164,10 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
     # Total Hours
     total_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).scalar() or 0
     total_hours = total_minutes / 60.0
-    weekly_team_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(models.DailyLog.date >= start_of_week).scalar() or 0
+    weekly_team_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
+        models.DailyLog.date >= start_of_week,
+        models.DailyLog.date <= start_of_week + timedelta(days=6)
+    ).scalar() or 0
     weekly_team_hours = weekly_team_minutes / 60.0
     monthly_team_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(models.DailyLog.date >= start_of_month).scalar() or 0
     monthly_team_hours = monthly_team_minutes / 60.0
@@ -1169,7 +1205,7 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
     
     # Recent Activities
     recent_activities = db.query(models.ActivityLog).order_by(models.ActivityLog.created_at.desc()).limit(10).all()
-
+ 
     # Calculate weekly coding & learning hours for each user
     user_ids = [u.id for u in team_members]
     weekly_logs_q = db.query(
@@ -1178,6 +1214,7 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
     ).filter(
         models.DailyLog.user_id.in_(user_ids),
         models.DailyLog.date >= start_of_week,
+        models.DailyLog.date <= start_of_week + timedelta(days=6),
         models.DailyLog.category.in_(["Coding", "Learning"])
     ).group_by(models.DailyLog.user_id).all() if user_ids else []
     
@@ -1189,7 +1226,8 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
             "user_id": user.id,
             "full_name": user.full_name,
             "username": user.username,
-            "weekly_work_hours": round(weekly_work_map.get(user.id, 0.0), 4)
+            "weekly_work_hours": round(weekly_work_map.get(user.id, 0.0), 4),
+            "weekly_target_hours": user.weekly_target_hours
         })
 
     return {
@@ -1214,8 +1252,14 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
     }
 
 @app.get(f"{settings.API_V1_STR}/admin/performance")
-def get_admin_user_performance(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
-    today = get_ist_date()
+def get_admin_user_performance(
+    week_offset: int = 0, 
+    perf_date: Optional[str] = None, 
+    db: Session = Depends(get_db), 
+    current_admin: models.User = Depends(get_current_admin)
+):
+    query_date = datetime.strptime(perf_date, "%Y-%m-%d").date() if perf_date else get_ist_date()
+    today = get_ist_date() - timedelta(weeks=week_offset)
     start_of_week = today - timedelta(days=(today.weekday() + 1) % 7) # Sunday
     week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
     week_days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -1228,9 +1272,9 @@ def get_admin_user_performance(db: Session = Depends(get_db), current_admin: mod
     
     user_ids = [u.id for u in team_members]
     
-    # Query today's logs
+    # Query performance date's logs
     today_logs = db.query(models.DailyLog).filter(
-        models.DailyLog.date == today,
+        models.DailyLog.date == query_date,
         models.DailyLog.user_id.in_(user_ids)
     ).all() if user_ids else []
     today_logs_map = {log.user_id: log for log in today_logs}

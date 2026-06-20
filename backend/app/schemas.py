@@ -54,6 +54,7 @@ class UserBase(BaseModel):
     is_active: bool = True
     primary_team: Optional[str] = None
     secondary_team: Optional[str] = None
+    weekly_target_hours: int = 10
 
 class UserCreate(UserBase):
     password: str
@@ -68,6 +69,7 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     primary_team: Optional[str] = None
     secondary_team: Optional[str] = None
+    weekly_target_hours: Optional[int] = None
 
 class UserResponse(UserBase):
     id: int

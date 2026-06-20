@@ -16,6 +16,7 @@ class User(Base):
     primary_team = Column(String, nullable=True)
     secondary_team = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    weekly_target_hours = Column(Integer, nullable=False, default=10)
     created_date = Column(DateTime, default=get_ist_time)
 
     @property
