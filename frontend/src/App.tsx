@@ -743,26 +743,26 @@ export function UserDashboard() {
           </div>
 
           {/* Weekly Work Target Widget */}
-          <div className="glass-card section-card" style={{ borderLeft: `4px solid ${data?.weekly_work_hours >= 10 ? 'var(--color-success)' : 'var(--color-warning)'}` }}>
+          <div className="glass-card section-card" style={{ borderLeft: `4px solid ${data?.weekly_work_hours >= (data?.weekly_target_hours || 10) ? 'var(--color-success)' : 'var(--color-warning)'}` }}>
             <h3 className="section-title" style={{ border: 'none', padding: '0', marginBottom: '0.75rem' }}>
               Weekly Work Target
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                 <span>Hours Logged (Coding & Learning):</span>
-                <strong>{formatHours(data?.weekly_work_hours)} / 10 hrs</strong>
+                <strong>{formatHours(data?.weekly_work_hours)} / {data?.weekly_target_hours || 10} hrs</strong>
               </div>
               <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden', margin: '0.25rem 0' }}>
                 <div 
                   style={{ 
-                    width: `${Math.min((data?.weekly_work_hours / 10) * 100, 100)}%`, 
+                    width: `${Math.min((data?.weekly_work_hours / (data?.weekly_target_hours || 10)) * 100, 100)}%`, 
                     height: '100%', 
-                    backgroundColor: data?.weekly_work_hours >= 10 ? 'var(--color-success)' : 'var(--color-warning)',
+                    backgroundColor: data?.weekly_work_hours >= (data?.weekly_target_hours || 10) ? 'var(--color-success)' : 'var(--color-warning)',
                     transition: 'width 0.3s ease'
                   }}
                 />
               </div>
-              {data?.weekly_work_hours >= 10 ? (
+              {data?.weekly_work_hours >= (data?.weekly_target_hours || 10) ? (
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: 600 }}>
                   <ShieldCheck size={16} />
                   <span>Target Met! Excellent work this week.</span>
@@ -770,7 +770,7 @@ export function UserDashboard() {
               ) : (
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                   <AlertCircle size={16} style={{ color: 'var(--color-warning)' }} />
-                  <span>Need {formatHours(10 - data?.weekly_work_hours)} more to reach the 10hr target.</span>
+                  <span>Need {formatHours(Math.max(0, (data?.weekly_target_hours || 10) - data?.weekly_work_hours))} more to reach the {data?.weekly_target_hours || 10}hr target.</span>
                 </div>
               )}
             </div>
@@ -2389,23 +2389,37 @@ export function Leaderboard() {
 export function Profile() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [hoveredPoint, setHoveredPoint] = useState<{
+    x: number;
+    y: number;
+    date: string;
+    hours: number;
+  } | null>(null);
   const { user } = useAuth();
 
-  const fetchProfile = async () => {
+  const fetchProfile = async (offset = weekOffset, isInitial = false) => {
+    if (!isInitial) setChartLoading(true);
     try {
       if (!user) return;
-      const data = await api.adminGetUserProfile(user.id);
+      const data = await api.adminGetUserProfile(user.id, offset);
       setProfile(data);
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
+      setChartLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProfile();
+    fetchProfile(weekOffset, true);
   }, [user]);
+
+  useEffect(() => {
+    fetchProfile(weekOffset, false);
+  }, [weekOffset]);
 
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
 
@@ -2518,6 +2532,230 @@ export function Profile() {
                   {profile?.completed_topics_count}
                 </strong>
               </div>
+            </div>
+
+            {/* WEEKLY LOGGED HOURS CHART CARD */}
+            <div className="glass-card" style={{ padding: '1.5rem', position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, border: 'none', padding: 0 }}>
+                  <TrendingUp size={18} style={{ color: 'var(--color-primary)' }} /> Weekly Logged Hours (Total Work)
+                </h3>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 600 }}>Week:</span>
+                  <select
+                    value={weekOffset}
+                    onChange={(e) => setWeekOffset(parseInt(e.target.value))}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      padding: '0.4rem 0.8rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value={0} style={{ background: '#1e1b4b' }}>Current Week</option>
+                    <option value={1} style={{ background: '#1e1b4b' }}>1 Week Ago</option>
+                    <option value={2} style={{ background: '#1e1b4b' }}>2 Weeks Ago</option>
+                    <option value={3} style={{ background: '#1e1b4b' }}>3 Weeks Ago</option>
+                    <option value={4} style={{ background: '#1e1b4b' }}>4 Weeks Ago</option>
+                  </select>
+                </div>
+              </div>
+
+              {chartLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '250px' }}>
+                  <div className="spinner"></div>
+                </div>
+              ) : profile?.weekly_hours ? (() => {
+                const chartWidth = 700;
+                const chartHeight = 250;
+                const paddingLeft = 40;
+                const paddingRight = 20;
+                const paddingTop = 20;
+                const paddingBottom = 40;
+
+                const graphWidth = chartWidth - paddingLeft - paddingRight;
+                const graphHeight = chartHeight - paddingTop - paddingBottom;
+
+                // Find max hours logged to scale Y axis dynamically
+                let maxHours = 8;
+                const userMax = Math.max(...(profile.weekly_hours || []), 0);
+                if (userMax > maxHours) {
+                  maxHours = userMax;
+                }
+                maxHours = Math.ceil(maxHours / 2) * 2;
+
+                // Generate Y axis ticks
+                const yTicks = [];
+                const tickCount = 5;
+                for (let i = 0; i < tickCount; i++) {
+                  yTicks.push((maxHours / (tickCount - 1)) * i);
+                }
+
+                const chartDays = profile.week_days || ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                const chartDates = profile.week_dates || [];
+
+                const points = (profile.weekly_hours || []).map((val: number, i: number) => {
+                  const x = paddingLeft + (i / 6) * graphWidth;
+                  const y = paddingTop + graphHeight - (val / maxHours) * graphHeight;
+                  return `${x},${y}`;
+                });
+                const dPath = `M ${points.join(' L ')}`;
+
+                return (
+                  <div style={{ position: 'relative', width: '100%', overflowX: 'visible' }}>
+                    <svg 
+                      viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
+                      width="100%" 
+                      height={chartHeight}
+                      style={{ minWidth: '500px', overflow: 'visible' }}
+                    >
+                      {/* Grid Lines & Y-ticks */}
+                      {yTicks.map((tick: number) => {
+                        const y = paddingTop + graphHeight - (tick / maxHours) * graphHeight;
+                        return (
+                          <g key={tick}>
+                            <line 
+                              x1={paddingLeft} 
+                              y1={y} 
+                              x2={chartWidth - paddingRight} 
+                              y2={y} 
+                              stroke="rgba(255,255,255,0.05)" 
+                              strokeWidth="1"
+                            />
+                            <text 
+                              x={paddingLeft - 10} 
+                              y={y + 4} 
+                              fill="var(--text-muted)" 
+                              fontSize="10" 
+                              textAnchor="end"
+                            >
+                              {tick.toFixed(0)}h
+                            </text>
+                          </g>
+                        );
+                      })}
+
+                      {/* X Axis ticks */}
+                      {chartDays.map((day: string, i: number) => {
+                        const x = paddingLeft + (i / 6) * graphWidth;
+                        return (
+                          <g key={day}>
+                            <line 
+                              x1={x} 
+                              y1={paddingTop} 
+                              x2={x} 
+                              y2={paddingTop + graphHeight} 
+                              stroke="rgba(255,255,255,0.05)"
+                              strokeWidth="1"
+                            />
+                            <text 
+                              x={x} 
+                              y={paddingTop + graphHeight + 18} 
+                              fill="var(--text-secondary)" 
+                              fontSize="11" 
+                              fontWeight="600"
+                              textAnchor="middle"
+                            >
+                              {day}
+                            </text>
+                            <text 
+                              x={x} 
+                              y={paddingTop + graphHeight + 32} 
+                              fill="var(--text-muted)" 
+                              fontSize="9" 
+                              textAnchor="middle"
+                            >
+                              {chartDates[i] ? chartDates[i].substring(5) : ''}
+                            </text>
+                          </g>
+                        );
+                      })}
+
+                      {/* User Path */}
+                      <path 
+                        d={dPath} 
+                        fill="none" 
+                        stroke="var(--color-primary)" 
+                        strokeWidth="3" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                        style={{ 
+                          filter: `drop-shadow(0px 2px 4px rgba(139, 92, 246, 0.4))`
+                        }}
+                      />
+
+                      {/* Dots at each point */}
+                      {(profile.weekly_hours || []).map((val: number, i: number) => {
+                        const x = paddingLeft + (i / 6) * graphWidth;
+                        const y = paddingTop + graphHeight - (val / maxHours) * graphHeight;
+                        return (
+                          <circle 
+                            key={i} 
+                            cx={x} 
+                            cy={y} 
+                            r="5" 
+                            fill="var(--background-card)" 
+                            stroke="var(--color-primary)" 
+                            strokeWidth="2.5" 
+                            style={{ cursor: 'pointer', transition: 'r 0.1s ease' }}
+                            onMouseEnter={(e) => {
+                              const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
+                              if (rect) {
+                                const pageX = e.clientX - rect.left;
+                                const pageY = e.clientY - rect.top;
+                                setHoveredPoint({
+                                  x: pageX,
+                                  y: pageY,
+                                  date: `${chartDays[i]} ${chartDates[i] ? chartDates[i] : ''}`,
+                                  hours: val
+                                });
+                              }
+                            }}
+                            onMouseLeave={() => setHoveredPoint(null)}
+                          />
+                        );
+                      })}
+                    </svg>
+
+                    {hoveredPoint && (
+                      <div style={{
+                        position: 'absolute',
+                        left: `${hoveredPoint.x}px`,
+                        top: `${hoveredPoint.y - 75}px`,
+                        transform: 'translateX(-50%)',
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        border: '1px solid var(--color-primary)',
+                        borderRadius: '8px',
+                        padding: '0.6rem 0.8rem',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        pointerEvents: 'none',
+                        zIndex: 10,
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.5)',
+                        minWidth: '110px',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.1s ease'
+                      }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{hoveredPoint.date}</div>
+                        <div style={{ marginTop: '0.3rem', color: 'var(--color-primary)', fontWeight: 700 }}>
+                          {formatHours(hoveredPoint.hours)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic', textAlign: 'center', padding: '2rem' }}>
+                  No logged hours details.
+                </div>
+              )}
             </div>
 
             {/* Assigned Tech roadmaps */}

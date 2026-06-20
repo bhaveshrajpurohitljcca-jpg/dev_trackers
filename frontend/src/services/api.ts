@@ -202,8 +202,8 @@ export const api = {
     });
   },
 
-  async adminGetUserProfile(userId: number): Promise<any> {
-    return request<any>(`/admin/users/${userId}/profile`);
+  async adminGetUserProfile(userId: number, weekOffset: number = 0): Promise<any> {
+    return request<any>(`/admin/users/${userId}/profile?week_offset=${weekOffset}`);
   },
 
   // Admin Roadmap/Tech Management

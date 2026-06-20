@@ -557,7 +557,7 @@ def admin_reset_password(user_id: int, data: Dict[str, str], db: Session = Depen
     return {"detail": "Password successfully reset"}
 
 @app.get(f"{settings.API_V1_STR}/admin/users/{{user_id}}/profile")
-def admin_get_user_profile(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def admin_get_user_profile(user_id: int, week_offset: int = 0, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     if current_user.role != "admin" and current_user.id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -609,6 +609,25 @@ def admin_get_user_profile(user_id: int, db: Session = Depends(get_db), current_
             "topics": topics_list
         })
 
+    # Weekly hours for chart (total work base)
+    today = get_ist_date() - timedelta(weeks=week_offset)
+    start_of_week = today - timedelta(days=(today.weekday() + 1) % 7) # Sunday
+    week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
+    week_days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+    weekly_logs = db.query(models.DailyLog).filter(
+        models.DailyLog.user_id == user_id,
+        models.DailyLog.date >= start_of_week,
+        models.DailyLog.date <= start_of_week + timedelta(days=6)
+    ).all()
+
+    weekly_hours_map = {d: 0.0 for d in week_dates}
+    for log in weekly_logs:
+        if log.date in weekly_hours_map:
+            weekly_hours_map[log.date] += log.hours + log.minutes / 60.0
+
+    weekly_hours_list = [weekly_hours_map[d] for d in week_dates]
+
     return {
         "user": user,
         "rank": rank,
@@ -619,7 +638,10 @@ def admin_get_user_profile(user_id: int, db: Session = Depends(get_db), current_
         "completed_topics_count": len(user.completed_topics),
         "projects_count": len(user.projects),
         "achievements": [],
-        "recent_logs": db.query(models.DailyLog).filter(models.DailyLog.user_id == user_id).order_by(models.DailyLog.date.desc()).limit(10).all()
+        "recent_logs": db.query(models.DailyLog).filter(models.DailyLog.user_id == user_id).order_by(models.DailyLog.date.desc()).limit(10).all(),
+        "week_days": week_days,
+        "week_dates": [str(d) for d in week_dates],
+        "weekly_hours": weekly_hours_list
     }
 
 # ==========================================
