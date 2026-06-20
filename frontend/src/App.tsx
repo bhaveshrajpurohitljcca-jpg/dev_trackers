@@ -117,7 +117,7 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   if (adminOnly && user.role !== 'admin') return <Navigate to="/dashboard" replace />;
-  if (!adminOnly && user.role === 'admin' && location.pathname !== '/profile') return <Navigate to="/admin/dashboard" replace />;
+  if (!adminOnly && user.role === 'admin' && location.pathname !== '/profile' && location.pathname !== '/gallery') return <Navigate to="/admin/dashboard" replace />;
 
   return <>{children}</>;
 }
@@ -204,6 +204,10 @@ function Sidebar() {
               <SettingsIcon size={18} />
               <span>Settings</span>
             </Link>
+            <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
+              <Award size={18} />
+              <span>Showcase Gallery</span>
+            </Link>
           </>
         ) : (
           <>
@@ -226,6 +230,10 @@ function Sidebar() {
             <Link to="/leaderboard" className={`sidebar-link ${location.pathname === '/leaderboard' ? 'active' : ''}`}>
               <Trophy size={18} />
               <span>Leaderboard</span>
+            </Link>
+            <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
+              <Award size={18} />
+              <span>Showcase Gallery</span>
             </Link>
           </>
         )}
@@ -2376,6 +2384,488 @@ export function Leaderboard() {
           </div>
         )}
       </div>
+    </Layout>
+  );
+}
+
+
+
+// ============================================================================
+// PAGE: GALLERY SHOWCASE ZONE
+// ============================================================================
+
+export function Gallery() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'canvas'>('canvas');
+  const [coords, setCoords] = useState<{[key: string]: {x: number, y: number}}>({});
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [dragInitial, setDragInitial] = useState({ x: 0, y: 0 });
+  const [particles, setParticles] = useState<{id: number, char: string, x: number, y: number, dx: number, dy: number, dr: number}[]>([]);
+  
+  const canvasRef = React.useRef<HTMLDivElement>(null);
+
+  const fetchShowcase = async () => {
+    try {
+      setLoading(true);
+      const res = await api.getShowcase();
+      setData(res);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchShowcase();
+  }, []);
+
+  const items = useMemo(() => {
+    const list: any[] = [];
+    if (!data) return list;
+    
+    if (data.projects) {
+      data.projects.forEach((p: any) => list.push({ ...p, type: 'project', uniqueId: `project-${p.id}` }));
+    }
+    if (data.completions) {
+      data.completions.forEach((c: any) => list.push({ ...c, type: 'completion', uniqueId: `completion-${c.id}` }));
+    }
+    if (data.daily_kings) {
+      data.daily_kings.forEach((k: any) => list.push({ ...k, type: 'king', uniqueId: `king-${k.id}` }));
+    }
+    if (data.champions) {
+      data.champions.forEach((ch: any) => list.push({ ...ch, type: 'champion', uniqueId: `champion-${ch.user_id}` }));
+    }
+    if (data.streaks) {
+      data.streaks.forEach((s: any) => list.push({ ...s, type: 'streak', uniqueId: `streak-${s.id}` }));
+    }
+
+    const getSortTime = (item: any) => {
+      if (item.type === 'project') return new Date(item.date || 0).getTime();
+      if (item.type === 'completion') return new Date(item.completed_at || 0).getTime();
+      if (item.type === 'king') return new Date(item.date || 0).getTime();
+      return Date.now();
+    };
+
+    return list.sort((a, b) => getSortTime(b) - getSortTime(a));
+  }, [data]);
+
+  const filteredItems = useMemo(() => {
+    if (activeFilter === 'all') return items;
+    return items.filter(item => {
+      if (activeFilter === 'projects') return item.type === 'project';
+      if (activeFilter === 'completions') return item.type === 'completion';
+      if (activeFilter === 'kings') return item.type === 'king';
+      if (activeFilter === 'streaks') return item.type === 'streak' || item.type === 'champion';
+      return true;
+    });
+  }, [items, activeFilter]);
+
+  // Initialize coordinates for canvas view
+  useEffect(() => {
+    if (filteredItems.length > 0 && viewMode === 'canvas') {
+      const newCoords = { ...coords };
+      let changed = false;
+      const cols = Math.max(1, Math.floor((window.innerWidth - 320) / 360));
+      
+      filteredItems.forEach((item, idx) => {
+        if (!newCoords[item.uniqueId]) {
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          newCoords[item.uniqueId] = {
+            x: col * 340 + 20,
+            y: row * 270 + 80
+          };
+          changed = true;
+        }
+      });
+      if (changed) {
+        setCoords(newCoords);
+      }
+    }
+  }, [filteredItems, viewMode]);
+
+  const handleTidyUp = () => {
+    const newCoords: {[key: string]: {x: number, y: number}} = {};
+    const cols = Math.max(1, Math.floor((window.innerWidth - 320) / 360));
+    filteredItems.forEach((item, idx) => {
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      newCoords[item.uniqueId] = {
+        x: col * 340 + 20,
+        y: row * 270 + 80
+      };
+    });
+    setCoords(newCoords);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    setDraggedId(id);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setDragInitial(coords[id] || { x: 0, y: 0 });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!draggedId || !canvasRef.current) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    const containerRect = canvasRef.current.getBoundingClientRect();
+    
+    // Constrain card inside canvas
+    const nextX = Math.max(0, Math.min(containerRect.width - 320, dragInitial.x + dx));
+    const nextY = Math.max(0, Math.min(containerRect.height - 250, dragInitial.y + dy));
+    
+    setCoords(prev => ({
+      ...prev,
+      [draggedId]: { x: nextX, y: nextY }
+    }));
+  };
+
+  const handleMouseUp = () => {
+    setDraggedId(null);
+  };
+
+  const handleHighFive = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + window.scrollY; // adjust for scroll position
+    const emojis = ['🎉', '🔥', '👏', '🚀', '⭐', '🙌', '💯', '✨'];
+    
+    const newParticles = Array.from({ length: 6 }).map((_, i) => ({
+      id: Date.now() + i,
+      char: emojis[Math.floor(Math.random() * emojis.length)],
+      x,
+      y,
+      dx: (Math.random() - 0.5) * 160,
+      dy: -100 - Math.random() * 80,
+      dr: Math.random() * 360
+    }));
+
+    setParticles(prev => [...prev, ...newParticles]);
+    
+    setTimeout(() => {
+      setParticles(prev => prev.filter(p => !newParticles.find(n => n.id === p.id)));
+    }, 800);
+  };
+
+  const formatDate = (isoString: string) => {
+    if (!isoString) return '';
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return isoString;
+    }
+  };
+
+  const renderCardContent = (item: any) => {
+    const initials = item.user_name?.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+
+    switch (item.type) {
+      case 'project':
+        return (
+          <>
+            <div className="card-badge-row">
+              <span className={`badge ${item.status === 'Completed' ? 'badge-completed' : 'badge-active'}`}>
+                {item.status}
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Project Showcase</span>
+            </div>
+            <h3 className="card-title">{item.name}</h3>
+            <p className="card-desc">{item.description || 'No description provided.'}</p>
+            <div className="grace-text" style={{ borderColor: 'var(--color-primary)' }}>
+              🎯 Invested: {item.hours}h {item.minutes}m of dedicated building.
+            </div>
+            <div className="card-meta">
+              <div className="card-avatar">{initials}</div>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+                {item.github_url && (
+                  <a href={item.github_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', border: 'none', borderRadius: '5px' }}>
+                    <FolderGit2 size={16} />
+                  </a>
+                )}
+                {item.host_url && (
+                  <a href={item.host_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', border: 'none', borderRadius: '5px' }}>
+                    <Eye size={16} />
+                  </a>
+                )}
+              </div>
+            </div>
+          </>
+        );
+
+      case 'completion':
+        return (
+          <>
+            <div className="card-badge-row">
+              <span className="badge badge-learning" style={{ backgroundColor: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee' }}>
+                Milestone Complete
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Roadmap</span>
+            </div>
+            <h3 className="card-title" style={{ fontSize: '1rem' }}>Cleared "{item.topic_name}"</h3>
+            <p className="card-desc" style={{ fontSize: '0.85rem' }}>Successfully completed study topic in <strong>{item.tech_name}</strong> roadmap.</p>
+            <div className="grace-text" style={{ color: '#22d3ee', backgroundColor: 'rgba(6, 182, 212, 0.08)', borderColor: '#06b6d4' }}>
+              📚 Milestone achieved! Knowledge extended.
+            </div>
+            <div className="card-meta">
+              <div className="card-avatar" style={{ background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.3) 0%, rgba(99, 102, 241, 0.3) 100%)' }}>{initials}</div>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
+              <span style={{ marginLeft: 'auto', fontSize: '0.75rem' }}>{formatDate(item.completed_at)}</span>
+            </div>
+          </>
+        );
+
+      case 'king':
+        return (
+          <>
+            <div className="card-badge-row">
+              <span className="badge badge-coding" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                Daily Grind King
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Heavy Log</span>
+            </div>
+            <h3 className="card-title">Logged {item.hours}h {item.minutes}m</h3>
+            <p className="card-desc">{item.description}</p>
+            <div className="grace-text" style={{ color: '#34d399', backgroundColor: 'rgba(16, 185, 129, 0.08)', borderColor: '#10b981' }}>
+              👑 {item.grace_word}
+            </div>
+            <div className="card-meta">
+              <div className="card-avatar" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(6, 182, 212, 0.3) 100%)' }}>{initials}</div>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
+              <span style={{ marginLeft: 'auto', fontSize: '0.75rem' }}>{formatDate(item.date)}</span>
+            </div>
+          </>
+        );
+
+      case 'champion':
+        return (
+          <>
+            <div className="card-badge-row">
+              <span className="badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                Consistency Champion
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Weekly Grind</span>
+            </div>
+            <h3 className="card-title" style={{ fontSize: '0.95rem' }}>Active on {item.heavy_days_count} days this week</h3>
+            <p className="card-desc" style={{ fontSize: '0.8rem' }}>Logged at least 1h 40m on {item.heavy_days_count} separate days. Total: {item.total_hours} hrs.</p>
+            
+            {/* SVG MINI-CHART */}
+            <div className="mini-chart">
+              <svg width="270" height="70" viewBox="0 0 270 70">
+                <defs>
+                  <linearGradient id={`grad-${item.user_id}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                {(() => {
+                  const vals = item.chart_data?.values || [];
+                  const maxVal = Math.max(2.5, ...vals);
+                  const points = vals.map((v: number, idx: number) => {
+                    const x = idx * 38 + 20;
+                    const y = 50 - (v / maxVal) * 40;
+                    return { x, y, val: v };
+                  });
+                  const pathD = points.reduce((acc: string, p: any, idx: number) => {
+                    return acc + (idx === 0 ? `M ${p.x} ${p.y}` : ` L ${p.x} ${p.y}`);
+                  }, '');
+                  const areaD = points.length > 0 
+                    ? `${pathD} L ${points[points.length - 1].x} 52 L ${points[0].x} 52 Z`
+                    : '';
+
+                  return (
+                    <>
+                      {areaD && <path d={areaD} fill={`url(#grad-${item.user_id})`} />}
+                      {pathD && <path d={pathD} fill="none" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+                      {points.map((p: any, idx: number) => (
+                        <g key={idx}>
+                          <circle cx={p.x} cy={p.y} r="3" fill="#090d16" stroke="#fbbf24" strokeWidth="2" />
+                          <text x={p.x} y="62" fontSize="7" fill="var(--text-muted)" textAnchor="middle">
+                            {item.chart_data?.labels[idx] || ''}
+                          </text>
+                        </g>
+                      ))}
+                    </>
+                  );
+                })()}
+              </svg>
+            </div>
+            
+            <div className="card-meta">
+              <div className="card-avatar" style={{ background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(239, 68, 68, 0.3) 100%)' }}>{initials}</div>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
+              <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#fbbf24', fontWeight: 600 }}>Consistency King</span>
+            </div>
+          </>
+        );
+
+      case 'streak':
+        return (
+          <>
+            <div className="card-badge-row">
+              <span className="badge" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                Streak Star
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Streak</span>
+            </div>
+            <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>{item.current_streak} Day Streak</span>
+              <span className="pulsing-flame">🔥</span>
+            </h3>
+            <p className="card-desc">Logging hours consistently! Longest streak: {item.longest_streak} days.</p>
+            <div className="grace-text" style={{ color: '#f87171', backgroundColor: 'rgba(239, 68, 68, 0.08)', borderColor: '#ef4444' }}>
+              ⚡ Keeping the fire burning! Unstoppable.
+            </div>
+            <div className="card-meta">
+              <div className="card-avatar" style={{ background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(245, 158, 11, 0.3) 100%)' }}>{initials}</div>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
+              <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>On Fire</span>
+            </div>
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
+
+  return (
+    <Layout>
+      <div className="gallery-container">
+        <div className="page-header" style={{ marginBottom: '1.5rem' }}>
+          <div className="page-title-section">
+            <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span>🌟 Developer Showcase Zone</span>
+            </h1>
+            <span className="page-subtitle">Celebrating recent milestones, consistent grinds, and outstanding achievements!</span>
+          </div>
+        </div>
+
+        {/* CONTROLS BAR */}
+        <div className="gallery-controls">
+          <div className="gallery-filters">
+            <button className={`filter-btn ${activeFilter === 'all' ? 'active' : ''}`} onClick={() => setActiveFilter('all')}>
+              All Achievements
+            </button>
+            <button className={`filter-btn ${activeFilter === 'projects' ? 'active' : ''}`} onClick={() => setActiveFilter('projects')}>
+              Projects Showcase
+            </button>
+            <button className={`filter-btn ${activeFilter === 'completions' ? 'active' : ''}`} onClick={() => setActiveFilter('completions')}>
+              Milestones
+            </button>
+            <button className={`filter-btn ${activeFilter === 'kings' ? 'active' : ''}`} onClick={() => setActiveFilter('kings')}>
+              Daily Kings (&gt;= 2.5h)
+            </button>
+            <button className={`filter-btn ${activeFilter === 'streaks' ? 'active' : ''}`} onClick={() => setActiveFilter('streaks')}>
+              Streaks & Consistency
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            {viewMode === 'canvas' && (
+              <button className="btn btn-secondary" onClick={handleTidyUp} style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
+                Tidy Up Board
+              </button>
+            )}
+            <div className="view-toggle">
+              <button className={`toggle-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>
+                Grid View
+              </button>
+              <button className={`toggle-btn ${viewMode === 'canvas' ? 'active' : ''}`} onClick={() => setViewMode('canvas')}>
+                Canvas Zone
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* RENDER VIEW */}
+        {filteredItems.length === 0 ? (
+          <div className="glass-card empty-state" style={{ padding: '4rem 2rem' }}>
+            <Award size={48} className="empty-icon" />
+            <h3>No achievements in this category yet</h3>
+            <p>Keep logging your hours, finishing roadmap topics, and completing projects to showcase your hard work!</p>
+          </div>
+        ) : viewMode === 'grid' ? (
+          <div className="gallery-grid">
+            {filteredItems.map(item => (
+              <div key={item.uniqueId} className={`showcase-card ${item.type}-card`}>
+                {renderCardContent(item)}
+                <div className="card-action-row">
+                  <button className="highfive-btn" onClick={handleHighFive}>
+                    👏 High Five
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div 
+            ref={canvasRef}
+            className="canvas-board"
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{ height: `${Math.max(700, Math.ceil(filteredItems.length / 3) * 270 + 150)}px` }}
+          >
+            <div className="canvas-instruction">
+              <Sliders size={14} /> Drag elements by their top headers to arrange your showcase zone!
+            </div>
+            
+            {filteredItems.map(item => {
+              const isDragging = draggedId === item.uniqueId;
+              const xCoord = coords[item.uniqueId]?.x ?? 20;
+              const yCoord = coords[item.uniqueId]?.y ?? 80;
+              
+              return (
+                <div 
+                  key={item.uniqueId}
+                  className={`showcase-card ${item.type}-card ${isDragging ? 'is-dragging' : ''}`}
+                  style={{
+                    transform: `translate3d(${xCoord}px, ${yCoord}px, 0)`,
+                    transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.19, 1, 0.22, 1)',
+                    zIndex: isDragging ? 100 : undefined
+                  }}
+                >
+                  <div className="card-drag-handle" onMouseDown={(e) => handleMouseDown(e, item.uniqueId)}>
+                    ⋮⋮ DRAG TO MOVE
+                  </div>
+                  {renderCardContent(item)}
+                  <div className="card-action-row">
+                    <button className="highfive-btn" onClick={handleHighFive}>
+                      👏 High Five
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* RENDER FLOATING PARTICLES */}
+      {particles.map(p => (
+        <span
+          key={p.id}
+          className="emoji-particle"
+          style={{
+            left: p.x,
+            top: p.y,
+            '--dx': `${p.dx}px`,
+            '--dy': `${p.dy}px`,
+            '--dr': `${p.dr}deg`
+          } as React.CSSProperties}
+        >
+          {p.char}
+        </span>
+      ))}
     </Layout>
   );
 }
@@ -5113,6 +5603,12 @@ export default function App() {
           <Route path="/leaderboard" element={
             <ProtectedRoute>
               <Leaderboard />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/gallery" element={
+            <ProtectedRoute>
+              <Gallery />
             </ProtectedRoute>
           } />
 

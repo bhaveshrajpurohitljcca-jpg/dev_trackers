@@ -990,7 +990,155 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
     leaderboard_data.sort(key=lambda x: x["total_hours"], reverse=True)
     return leaderboard_data
 
-# Achievements endpoint removed
+
+# ==========================================
+# SHOWCASE GALLERY ENDPOINT
+# ==========================================
+
+@app.get(f"{settings.API_V1_STR}/showcase")
+def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # 1. Recent Projects
+    projects = (
+        db.query(models.Project)
+        .order_by(models.Project.id.desc())
+        .limit(8)
+        .all()
+    )
+    serialized_projects = []
+    for p in projects:
+        serialized_projects.append({
+            "id": p.id,
+            "user_name": p.user.full_name,
+            "username": p.user.username,
+            "name": p.name,
+            "description": p.description,
+            "status": p.status,
+            "github_url": p.github_url,
+            "host_url": p.host_url,
+            "hours_invested": round(p.hours_invested_hours + p.hours_invested_minutes / 60.0, 2),
+            "hours": p.hours_invested_hours,
+            "minutes": p.hours_invested_minutes,
+            "date": p.end_date.isoformat() if p.end_date else (p.start_date.isoformat() if p.start_date else None)
+        })
+
+    # 2. Topic/Technology completions
+    completions = (
+        db.query(models.CompletedTopic)
+        .order_by(models.CompletedTopic.completed_at.desc())
+        .limit(8)
+        .all()
+    )
+    serialized_completions = []
+    for c in completions:
+        serialized_completions.append({
+            "id": c.id,
+            "user_name": c.user.full_name,
+            "username": c.user.username,
+            "topic_name": c.topic.name,
+            "tech_name": c.topic.technology.name,
+            "completed_at": c.completed_at.isoformat()
+        })
+
+    # 3. Daily Kings (work logs >= 2.5 hours)
+    daily_logs = (
+        db.query(models.DailyLog)
+        .filter((models.DailyLog.hours * 60 + models.DailyLog.minutes) >= 150)
+        .order_by(models.DailyLog.date.desc(), models.DailyLog.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    GRACE_WORDS = [
+        "Incredible focus! Setting the gold standard for developer grind.",
+        "Unstoppable energy! Absolute coding masterclass.",
+        "Phenomenal session! Powering through lines of code like a champ.",
+        "Pure dedication! Turning coffee into working software.",
+        "Elite work ethic! Building the future, one byte at a time.",
+        "Outstanding stamina! Pushing limits and achieving milestones.",
+        "Dev team superstar! Heavy-lifting development with ease."
+    ]
+    serialized_daily_kings = []
+    for log in daily_logs:
+        grace_word = GRACE_WORDS[log.id % len(GRACE_WORDS)]
+        serialized_daily_kings.append({
+            "id": log.id,
+            "user_name": log.user.full_name,
+            "username": log.user.username,
+            "date": log.date.isoformat(),
+            "hours": log.hours,
+            "minutes": log.minutes,
+            "category": log.category,
+            "description": log.description,
+            "grace_word": grace_word
+        })
+
+    # 4. Consistency Champions (High consistency chart data over last 7 days)
+    today = get_ist_date()
+    seven_days_ago = today - timedelta(days=6)
+    
+    active_users = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).all()
+    date_list = [seven_days_ago + timedelta(days=i) for i in range(7)]
+    date_labels = [d.strftime("%a") for d in date_list]
+    
+    recent_logs = db.query(models.DailyLog).filter(
+        models.DailyLog.date >= seven_days_ago,
+        models.DailyLog.date <= today
+    ).all()
+    
+    user_daily_minutes = {u.id: {d: 0 for d in date_list} for u in active_users}
+    for log in recent_logs:
+        if log.user_id in user_daily_minutes:
+            if log.date in user_daily_minutes[log.user_id]:
+                user_daily_minutes[log.user_id][log.date] += log.hours * 60 + log.minutes
+                
+    serialized_champions = []
+    for u in active_users:
+        daily_minutes_dict = user_daily_minutes[u.id]
+        daily_hours_list = [round(daily_minutes_dict[d] / 60.0, 2) for d in date_list]
+        heavy_days_count = sum(1 for d in date_list if daily_minutes_dict[d] >= 100)
+        total_week_hours = sum(daily_hours_list)
+        
+        if total_week_hours > 0:
+            serialized_champions.append({
+                "user_id": u.id,
+                "user_name": u.full_name,
+                "username": u.username,
+                "heavy_days_count": heavy_days_count,
+                "total_hours": round(total_week_hours, 2),
+                "chart_data": {
+                    "labels": date_labels,
+                    "values": daily_hours_list
+                }
+            })
+            
+    serialized_champions.sort(key=lambda x: (x["heavy_days_count"], x["total_hours"]), reverse=True)
+    serialized_champions = serialized_champions[:6]
+
+    # 5. Streak Stars
+    streaks = (
+        db.query(models.Streak)
+        .filter(models.Streak.current_streak >= 1)
+        .order_by(models.Streak.current_streak.desc())
+        .limit(6)
+        .all()
+    )
+    serialized_streaks = []
+    for s in streaks:
+        serialized_streaks.append({
+            "id": s.id,
+            "user_id": s.user_id,
+            "user_name": s.user.full_name,
+            "username": s.user.username,
+            "current_streak": s.current_streak,
+            "longest_streak": s.longest_streak
+        })
+
+    return {
+        "projects": serialized_projects,
+        "completions": serialized_completions,
+        "daily_kings": serialized_daily_kings,
+        "champions": serialized_champions,
+        "streaks": serialized_streaks
+    }
 
 # ==========================================
 # ACTIVITIES FEED

@@ -383,5 +383,7 @@ export const api = {
     });
   },
 
-  // Messaging methods removed
+  async getShowcase(): Promise<any> {
+    return request<any>('/showcase');
+  },
 };
