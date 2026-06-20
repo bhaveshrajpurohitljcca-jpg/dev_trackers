@@ -872,7 +872,7 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
     user_ids = [u.id for u in users]
     
     today = get_ist_date()
-    start_of_week = today - timedelta(days=today.weekday()) # Monday
+    start_of_week = today - timedelta(days=(today.weekday() + 1) % 7) # Sunday
     start_of_month = today.replace(day=1)
     
     # Bulk query total hours
@@ -911,7 +911,7 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
     for user_id in user_ids:
         s = streaks_map.get(user_id)
         if s and s.last_log_date:
-            if s.last_log_date < today - timedelta(days=1):
+            if crud.get_working_days_gap(s.last_log_date, today) > 0:
                 s.current_streak = 0
                 streak_changed = True
                 
@@ -957,12 +957,33 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
     
     # Date calculations
     today = get_ist_date()
-    start_of_week = today - timedelta(days=today.weekday())
+    start_of_week = today - timedelta(days=(today.weekday() + 1) % 7) # Sunday
     start_of_month = today.replace(day=1)
     
     # Hours calculation
     total_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(models.DailyLog.user_id == user_id).scalar() or 0
     total_hours = total_minutes / 60.0
+    
+    # Today's hours (both total and categories)
+    today_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
+        models.DailyLog.user_id == user_id,
+        models.DailyLog.date == today
+    ).scalar() or 0
+    today_hours = today_minutes / 60.0
+
+    today_coding_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
+        models.DailyLog.user_id == user_id,
+        models.DailyLog.date == today,
+        models.DailyLog.category == "Coding"
+    ).scalar() or 0
+    today_coding_hours = today_coding_minutes / 60.0
+
+    today_learning_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
+        models.DailyLog.user_id == user_id,
+        models.DailyLog.date == today,
+        models.DailyLog.category == "Learning"
+    ).scalar() or 0
+    today_learning_hours = today_learning_minutes / 60.0
     
     weekly_minutes = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(
         models.DailyLog.user_id == user_id,
@@ -1065,6 +1086,9 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
         "total_hours": round(total_hours, 4),
         "weekly_hours": round(weekly_hours, 4),
         "monthly_hours": round(monthly_hours, 4),
+        "today_hours": round(today_hours, 4),
+        "today_coding_hours": round(today_coding_hours, 4),
+        "today_learning_hours": round(today_learning_hours, 4),
         "coding_hours": round(coding_hours, 4),
         "learning_hours": round(learning_hours, 4),
         "research_hours": round(research_hours, 4),
@@ -1086,7 +1110,7 @@ def get_user_dashboard(db: Session = Depends(get_db), current_user: models.User 
 @app.get(f"{settings.API_V1_STR}/admin/dashboard")
 def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
     today = get_ist_date()
-    start_of_week = today - timedelta(days=today.weekday())
+    start_of_week = today - timedelta(days=(today.weekday() + 1) % 7) # Sunday
     start_of_month = today.replace(day=1)
     
     # Counts
@@ -1192,9 +1216,9 @@ def get_admin_dashboard(db: Session = Depends(get_db), current_admin: models.Use
 @app.get(f"{settings.API_V1_STR}/admin/performance")
 def get_admin_user_performance(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
     today = get_ist_date()
-    start_of_week = today - timedelta(days=today.weekday()) # Monday
+    start_of_week = today - timedelta(days=(today.weekday() + 1) % 7) # Sunday
     week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
-    week_days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    week_days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     
     # Fetch all active team members (role = user, is_active = True)
     team_members = db.query(models.User).filter(

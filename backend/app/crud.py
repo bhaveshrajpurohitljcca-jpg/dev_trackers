@@ -319,6 +319,17 @@ def create_daily_log(db: Session, user_id: int, log_data: schemas.DailyLogCreate
     db.commit()
     return db_log
 
+def get_working_days_gap(last_date: date, log_date: date) -> int:
+    if log_date <= last_date:
+        return 0
+    current = last_date + timedelta(days=1)
+    non_sundays = 0
+    while current < log_date:
+        if current.weekday() != 6: # 6 is Sunday
+            non_sundays += 1
+        current += timedelta(days=1)
+    return non_sundays
+
 def update_user_streak(db: Session, user_id: int, log_date: date):
     db_streak = db.query(models.Streak).filter(models.Streak.user_id == user_id).first()
     if not db_streak:
@@ -333,19 +344,19 @@ def update_user_streak(db: Session, user_id: int, log_date: date):
         db_streak.longest_streak = max(db_streak.longest_streak, 1)
         db_streak.last_log_date = log_date
     else:
-        # Calculate difference in days
-        diff = (log_date - last_date).days
-        if diff == 1:
-            # Consecutive day
-            db_streak.current_streak += 1
-            db_streak.longest_streak = max(db_streak.longest_streak, db_streak.current_streak)
-            db_streak.last_log_date = log_date
-        elif diff > 1:
-            # Gap, reset current streak to 1
-            db_streak.current_streak = 1
-            db_streak.longest_streak = max(db_streak.longest_streak, 1)
-            db_streak.last_log_date = log_date
-        elif diff == 0:
+        if log_date > last_date:
+            gap = get_working_days_gap(last_date, log_date)
+            if gap == 0:
+                # Consecutive working day (either next calendar day, or separated only by Sunday)
+                db_streak.current_streak += 1
+                db_streak.longest_streak = max(db_streak.longest_streak, db_streak.current_streak)
+                db_streak.last_log_date = log_date
+            else:
+                # Gap in working days, reset current streak to 1
+                db_streak.current_streak = 1
+                db_streak.longest_streak = max(db_streak.longest_streak, 1)
+                db_streak.last_log_date = log_date
+        elif log_date == last_date:
             # Same day log, streak remains same, just update last log date
             pass
         else:
@@ -358,7 +369,7 @@ def verify_and_reset_expired_streak(db: Session, user_id: int):
     db_streak = db.query(models.Streak).filter(models.Streak.user_id == user_id).first()
     if db_streak and db_streak.last_log_date:
         today = get_ist_date()
-        if db_streak.last_log_date < today - timedelta(days=1):
+        if get_working_days_gap(db_streak.last_log_date, today) > 0:
             db_streak.current_streak = 0
             db.commit()
     return db_streak
