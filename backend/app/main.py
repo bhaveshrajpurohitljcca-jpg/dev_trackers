@@ -991,6 +991,47 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
     return leaderboard_data
 
 
+@app.get(f"{settings.API_V1_STR}/debug-db")
+def debug_db(db: Session = Depends(get_db)):
+    # 1. Total count of daily_logs
+    total_logs = db.query(models.DailyLog).count()
+    
+    # 2. Get the last 20 daily logs with date and username
+    logs = (
+        db.query(models.DailyLog)
+        .order_by(models.DailyLog.date.desc())
+        .limit(20)
+        .all()
+    )
+    serialized_logs = []
+    for log in logs:
+        serialized_logs.append({
+            "id": log.id,
+            "username": log.user.username if log.user else None,
+            "date": log.date.isoformat() if log.date else None,
+            "hours": log.hours,
+            "minutes": log.minutes,
+            "description": log.description[:50] if log.description else ""
+        })
+        
+    # 3. Print dates calculations
+    today = get_ist_date()
+    start_of_current_week = today - timedelta(days=(today.weekday() + 1) % 7)
+    start_of_prev_week = start_of_current_week - timedelta(days=7)
+    end_of_prev_week = start_of_current_week - timedelta(days=1)
+    
+    return {
+        "database_url_type": "postgresql" if "postgresql" in settings.DATABASE_URL else "sqlite",
+        "total_logs_count": total_logs,
+        "ist_today": today.isoformat(),
+        "ist_today_weekday": today.weekday(),
+        "start_of_current_week": start_of_current_week.isoformat(),
+        "start_of_prev_week": start_of_prev_week.isoformat(),
+        "end_of_prev_week": end_of_prev_week.isoformat(),
+        "sample_logs": serialized_logs
+    }
+
+
 # ==========================================
 # SHOWCASE GALLERY ENDPOINT
 # ==========================================
