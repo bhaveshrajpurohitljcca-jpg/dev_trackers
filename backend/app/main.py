@@ -998,13 +998,15 @@ def get_leaderboard(db: Session = Depends(get_db), current_user: models.User = D
 @app.get(f"{settings.API_V1_STR}/showcase")
 def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     today = get_ist_date()
+    now_ist = get_ist_time()
     
-    # 1. Recent Projects (uploaded/started within last 5 days)
-    five_days_ago = today - timedelta(days=5)
+    # 1. Featured Projects (started within the last 3 days, max 6, most recent first)
+    three_days_ago = today - timedelta(days=3)
     projects = (
         db.query(models.Project)
-        .filter(models.Project.start_date >= five_days_ago)
+        .filter(models.Project.start_date >= three_days_ago)
         .order_by(models.Project.id.desc())
+        .limit(6)
         .all()
     )
     serialized_projects = []
@@ -1034,38 +1036,19 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
             "hours_invested": round(p.hours_invested_hours + p.hours_invested_minutes / 60.0, 2),
             "hours": p.hours_invested_hours,
             "minutes": p.hours_invested_minutes,
-            "date": p.end_date.isoformat() if p.end_date else (p.start_date.isoformat() if p.start_date else None),
+            "date": p.start_date.isoformat() if p.start_date else None,
             "logs": serialized_logs
         })
 
-    # 2. Topic/Technology completions (completed within last 3 days)
-    three_days_ago = today - timedelta(days=3)
-    completions = (
-        db.query(models.CompletedTopic)
-        .filter(models.CompletedTopic.completed_at >= datetime.combine(three_days_ago, datetime.min.time()))
-        .order_by(models.CompletedTopic.completed_at.desc())
-        .all()
-    )
-    serialized_completions = []
-    for c in completions:
-        serialized_completions.append({
-            "id": c.id,
-            "user_name": c.user.full_name,
-            "username": c.user.username,
-            "topic_name": c.topic.name,
-            "tech_name": c.topic.technology.name,
-            "completed_at": c.completed_at.isoformat()
-        })
-
-    # 3. Daily Kings (work logs >= 2.5 hours within last 3 days, date >= today - 2 days)
-    three_days_ago_date = today - timedelta(days=2)
+    # 2. Hard Work Spotlight (logs from last 24 hours, duration >= 2h 30m)
+    cutoff_24h = now_ist - timedelta(hours=24)
     daily_logs = (
         db.query(models.DailyLog)
         .filter(
-            models.DailyLog.date >= three_days_ago_date,
+            models.DailyLog.created_at >= cutoff_24h,
             (models.DailyLog.hours * 60 + models.DailyLog.minutes) >= 150
         )
-        .order_by(models.DailyLog.date.desc(), models.DailyLog.created_at.desc())
+        .order_by(models.DailyLog.created_at.desc())
         .all()
     )
     GRACE_WORDS = [
@@ -1092,70 +1075,94 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
             "grace_word": grace_word
         })
 
-    # 4. Consistency Champions (averaging >= 1 hour 20 minutes/day over last 5 days)
-    five_days_ago_date = today - timedelta(days=4)
-    active_users = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).all()
-    date_list = [five_days_ago_date + timedelta(days=i) for i in range(5)]
-    date_labels = [d.strftime("%a") for d in date_list]
+    # 3. Learning Achievements (completed technologies in the last 24 hours)
+    # A user completes a technology if they completed all its topics, with the last completion within 24h
+    user_techs = db.query(models.UserTechnology).all()
+    completed_techs = []
+    processed_pairs = set()
     
-    recent_logs = db.query(models.DailyLog).filter(
-        models.DailyLog.date >= five_days_ago_date,
-        models.DailyLog.date <= today
-    ).all()
-    
-    user_daily_minutes = {u.id: {d: 0 for d in date_list} for u in active_users}
-    for log in recent_logs:
-        if log.user_id in user_daily_minutes:
-            if log.date in user_daily_minutes[log.user_id]:
-                user_daily_minutes[log.user_id][log.date] += log.hours * 60 + log.minutes
-                
-    serialized_champions = []
-    for u in active_users:
-        daily_minutes_dict = user_daily_minutes[u.id]
-        total_minutes = sum(daily_minutes_dict.values())
-        avg_minutes = total_minutes / 5.0
+    for ut in user_techs:
+        pair_key = (ut.user_id, ut.technology_id)
+        if pair_key in processed_pairs:
+            continue
+        processed_pairs.add(pair_key)
         
-        # Filter: daily average of at least 80 minutes (1h 20m)
-        if avg_minutes >= 80:
-            daily_hours_list = [round(daily_minutes_dict[d] / 60.0, 2) for d in date_list]
-            serialized_champions.append({
-                "user_id": u.id,
-                "user_name": u.full_name,
-                "username": u.username,
-                "total_hours": round(total_minutes / 60.0, 2),
-                "average_hours": round(avg_minutes / 60.0, 2),
-                "chart_data": {
-                    "labels": date_labels,
-                    "values": daily_hours_list
-                }
-            })
-            
-    serialized_champions.sort(key=lambda x: x["average_hours"], reverse=True)
+        user = ut.user
+        tech = ut.technology
+        topics = tech.topics
+        if not topics:
+            continue
+        topic_ids = [t.id for t in topics]
+        
+        completions = db.query(models.CompletedTopic).filter(
+            models.CompletedTopic.user_id == user.id,
+            models.CompletedTopic.topic_id.in_(topic_ids)
+        ).all()
+        
+        if len(completions) == len(topics):
+            latest_completion_at = max(c.completed_at for c in completions)
+            if latest_completion_at >= cutoff_24h:
+                completed_techs.append({
+                    "id": f"{user.id}-{tech.id}",
+                    "user_name": user.full_name,
+                    "username": user.username,
+                    "tech_name": tech.name,
+                    "completed_date": latest_completion_at.date().isoformat(),
+                    "completed_time": latest_completion_at.strftime("%I:%M %p"),
+                    "completed_at": latest_completion_at.isoformat()
+                })
 
-    # 5. Streak Stars (streaks >= 3 days)
-    streaks = (
-        db.query(models.Streak)
-        .filter(models.Streak.current_streak >= 3)
-        .order_by(models.Streak.current_streak.desc())
+    # 4. Weekly Legends (top 3 contributors for current week starting Sunday)
+    start_of_week = today - timedelta(days=(today.weekday() + 1) % 7)
+    active_users = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).all()
+    user_ids = [u.id for u in active_users]
+    
+    weekly_hours_q = db.query(
+        models.DailyLog.user_id,
+        func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)
+    ).filter(
+        models.DailyLog.user_id.in_(user_ids),
+        models.DailyLog.date >= start_of_week
+    ).group_by(models.DailyLog.user_id).all() if user_ids else []
+    
+    weekly_hours_map = {user_id: (minutes or 0) / 60.0 for user_id, minutes in weekly_hours_q}
+    
+    weekly_contributors = []
+    for u in active_users:
+        hours = round(weekly_hours_map.get(u.id, 0.0), 2)
+        weekly_contributors.append({
+            "user_id": u.id,
+            "user_name": u.full_name,
+            "username": u.username,
+            "total_hours": hours
+        })
+        
+    weekly_contributors.sort(key=lambda x: x["total_hours"], reverse=True)
+    weekly_legends = weekly_contributors[:3]
+
+    # 5. Live Activity Feed (last 24 hours activities)
+    activities = (
+        db.query(models.ActivityLog)
+        .filter(models.ActivityLog.created_at >= cutoff_24h)
+        .order_by(models.ActivityLog.created_at.desc())
         .all()
     )
-    serialized_streaks = []
-    for s in streaks:
-        serialized_streaks.append({
-            "id": s.id,
-            "user_id": s.user_id,
-            "user_name": s.user.full_name,
-            "username": s.user.username,
-            "current_streak": s.current_streak,
-            "longest_streak": s.longest_streak
+    serialized_activities = []
+    for act in activities:
+        serialized_activities.append({
+            "id": act.id,
+            "user_name": act.user_name,
+            "activity_type": act.activity_type,
+            "detail": act.detail,
+            "created_at": act.created_at.isoformat()
         })
 
     return {
         "projects": serialized_projects,
-        "completions": serialized_completions,
         "daily_kings": serialized_daily_kings,
-        "champions": serialized_champions,
-        "streaks": serialized_streaks
+        "completed_techs": completed_techs,
+        "weekly_legends": weekly_legends,
+        "activities": serialized_activities
     }
 
 # ==========================================

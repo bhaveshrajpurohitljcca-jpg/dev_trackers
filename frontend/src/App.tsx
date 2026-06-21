@@ -206,7 +206,7 @@ function Sidebar() {
             </Link>
             <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
               <Award size={18} />
-              <span>Showcase Gallery</span>
+              <span>Spotlight Gallery</span>
             </Link>
           </>
         ) : (
@@ -233,7 +233,7 @@ function Sidebar() {
             </Link>
             <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
               <Award size={18} />
-              <span>Showcase Gallery</span>
+              <span>Spotlight Gallery</span>
             </Link>
           </>
         )}
@@ -2397,28 +2397,9 @@ export function Leaderboard() {
 export function Gallery() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [viewMode, setViewMode] = useState<'grid' | 'canvas'>(window.innerWidth < 768 ? 'grid' : 'canvas');
-  const [coords, setCoords] = useState<{[key: string]: {x: number, y: number}}>({});
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [dragInitial, setDragInitial] = useState({ x: 0, y: 0 });
-  const [particles, setParticles] = useState<{id: number, char: string, x: number, y: number, dx: number, dy: number, dr: number}[]>([]);
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
-  
-  const canvasRef = React.useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (mobile) {
-        setViewMode('grid');
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const [particles, setParticles] = useState<{id: number, char: string, x: number, y: number, dx: number, dy: number, dr: number}[]>([]);
+  const canvasConfettiRef = React.useRef<HTMLCanvasElement>(null);
 
   const fetchShowcase = async () => {
     try {
@@ -2436,101 +2417,113 @@ export function Gallery() {
     fetchShowcase();
   }, []);
 
-  const items = useMemo(() => {
-    const list: any[] = [];
-    if (!data) return list;
+  // Confetti burst on mount if there are recent learning achievements
+  useEffect(() => {
+    if (!data || !data.completed_techs || data.completed_techs.length === 0) return;
     
-    if (data.projects) {
-      data.projects.forEach((p: any) => list.push({ ...p, type: 'project', uniqueId: `project-${p.id}` }));
-    }
-    if (data.completions) {
-      data.completions.forEach((c: any) => list.push({ ...c, type: 'completion', uniqueId: `completion-${c.id}` }));
-    }
-    if (data.daily_kings) {
-      data.daily_kings.forEach((k: any) => list.push({ ...k, type: 'king', uniqueId: `king-${k.id}` }));
-    }
-    if (data.champions) {
-      data.champions.forEach((ch: any) => list.push({ ...ch, type: 'champion', uniqueId: `champion-${ch.user_id}` }));
-    }
-    if (data.streaks) {
-      data.streaks.forEach((s: any) => list.push({ ...s, type: 'streak', uniqueId: `streak-${s.id}` }));
-    }
-
-    const getSortTime = (item: any) => {
-      if (item.type === 'project') return new Date(item.date || 0).getTime();
-      if (item.type === 'completion') return new Date(item.completed_at || 0).getTime();
-      if (item.type === 'king') return new Date(item.date || 0).getTime();
-      return Date.now();
+    const canvas = canvasConfettiRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    let animationFrameId: number;
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+    
+    const handleResize = () => {
+      if (canvas) {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      }
     };
-
-    return list.sort((a, b) => getSortTime(b) - getSortTime(a));
+    window.addEventListener('resize', handleResize);
+    
+    const colors = ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#8b5cf6', '#06b6d4'];
+    interface Particle {
+      x: number;
+      y: number;
+      size: number;
+      color: string;
+      speedX: number;
+      speedY: number;
+      rotation: number;
+      rotationSpeed: number;
+      opacity: number;
+    }
+    
+    const particlesList: Particle[] = [];
+    
+    // Left corner burst (shoots up and to the right)
+    for (let i = 0; i < 80; i++) {
+      particlesList.push({
+        x: 0,
+        y: height,
+        size: Math.random() * 8 + 6,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        speedX: Math.random() * 12 + 6,
+        speedY: -Math.random() * 22 - 12,
+        rotation: Math.random() * 360,
+        rotationSpeed: (Math.random() - 0.5) * 8,
+        opacity: 1
+      });
+    }
+    // Right corner burst (shoots up and to the left)
+    for (let i = 0; i < 80; i++) {
+      particlesList.push({
+        x: width,
+        y: height,
+        size: Math.random() * 8 + 6,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        speedX: -Math.random() * 12 - 6,
+        speedY: -Math.random() * 22 - 12,
+        rotation: Math.random() * 360,
+        rotationSpeed: (Math.random() - 0.5) * 8,
+        opacity: 1
+      });
+    }
+    
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+      let alive = false;
+      
+      particlesList.forEach(p => {
+        if (p.opacity <= 0) return;
+        alive = true;
+        
+        p.x += p.speedX;
+        p.y += p.speedY;
+        p.speedY += 0.35; // gravity
+        p.speedX *= 0.98; // friction
+        p.rotation += p.rotationSpeed;
+        
+        if (p.y > height && p.speedY > 0) {
+          p.opacity -= 0.02;
+        }
+        
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rotation * Math.PI) / 180);
+        ctx.globalAlpha = p.opacity;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        ctx.restore();
+      });
+      
+      if (alive) {
+        animationFrameId = requestAnimationFrame(render);
+      }
+    };
+    
+    render();
+    
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
+    };
   }, [data]);
 
-  // Initialize coordinates for canvas view
-  useEffect(() => {
-    if (items.length > 0 && viewMode === 'canvas') {
-      const newCoords = { ...coords };
-      let changed = false;
-      const cols = Math.max(1, Math.floor((window.innerWidth - 320) / 360));
-      
-      items.forEach((item, idx) => {
-        if (!newCoords[item.uniqueId]) {
-          const col = idx % cols;
-          const row = Math.floor(idx / cols);
-          newCoords[item.uniqueId] = {
-            x: col * 340 + 20,
-            y: row * 270 + 80
-          };
-          changed = true;
-        }
-      });
-      if (changed) {
-        setCoords(newCoords);
-      }
-    }
-  }, [items, viewMode]);
-
-  const handleTidyUp = () => {
-    const newCoords: {[key: string]: {x: number, y: number}} = {};
-    const cols = Math.max(1, Math.floor((window.innerWidth - 320) / 360));
-    items.forEach((item, idx) => {
-      const col = idx % cols;
-      const row = Math.floor(idx / cols);
-      newCoords[item.uniqueId] = {
-        x: col * 340 + 20,
-        y: row * 270 + 80
-      };
-    });
-    setCoords(newCoords);
-  };
-
-  const handleMouseDown = (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    setDraggedId(id);
-    setDragStart({ x: e.clientX, y: e.clientY });
-    setDragInitial(coords[id] || { x: 0, y: 0 });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggedId || !canvasRef.current) return;
-    const dx = e.clientX - dragStart.x;
-    const dy = e.clientY - dragStart.y;
-    const containerRect = canvasRef.current.getBoundingClientRect();
-    
-    const nextX = Math.max(0, Math.min(containerRect.width - 320, dragInitial.x + dx));
-    const nextY = Math.max(0, Math.min(containerRect.height - 250, dragInitial.y + dy));
-    
-    setCoords(prev => ({
-      ...prev,
-      [draggedId]: { x: nextX, y: nextY }
-    }));
-  };
-
-  const handleMouseUp = () => {
-    setDraggedId(null);
-  };
-
   const handleHighFive = (e: React.MouseEvent) => {
+    e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
     const y = rect.top + window.scrollY;
@@ -2563,306 +2556,319 @@ export function Gallery() {
     }
   };
 
-  const renderCardContent = (item: any) => {
-    const initials = item.user_name?.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
-
-    switch (item.type) {
-      case 'project':
-        return (
-          <>
-            <div className="card-badge-row">
-              <span className={`badge ${item.status === 'Completed' ? 'badge-completed' : 'badge-active'}`}>
-                {item.status}
-              </span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Project Showcase</span>
-            </div>
-            <h3 className="card-title">{item.name}</h3>
-            <p className="card-desc">{item.description || 'No description provided.'}</p>
-            <div className="grace-text" style={{ borderColor: 'var(--color-primary)' }}>
-              🎯 Invested: {item.hours}h {item.minutes}m of building.
-            </div>
-            <div className="card-meta">
-              <div className="card-avatar">{initials}</div>
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
-                {item.github_url && (
-                  <a href={item.github_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', border: 'none', borderRadius: '5px' }}>
-                    <FolderGit2 size={16} />
-                  </a>
-                )}
-                {item.host_url && (
-                  <a href={item.host_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', border: 'none', borderRadius: '5px' }}>
-                    <Eye size={16} />
-                  </a>
-                )}
-              </div>
-            </div>
-          </>
-        );
-
-      case 'completion':
-        return (
-          <>
-            <div className="card-badge-row">
-              <span className="badge badge-learning" style={{ backgroundColor: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee' }}>
-                Milestone Complete
-              </span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Roadmap</span>
-            </div>
-            <h3 className="card-title" style={{ fontSize: '1rem' }}>Cleared "{item.topic_name}"</h3>
-            <p className="card-desc" style={{ fontSize: '0.85rem' }}>Successfully completed study topic in <strong>{item.tech_name}</strong> roadmap.</p>
-            <div className="grace-text" style={{ color: '#22d3ee', backgroundColor: 'rgba(6, 182, 212, 0.08)', borderColor: '#06b6d4' }}>
-              📚 Milestone achieved! Knowledge extended.
-            </div>
-            <div className="card-meta">
-              <div className="card-avatar" style={{ background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.3) 0%, rgba(99, 102, 241, 0.3) 100%)' }}>{initials}</div>
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
-              <span style={{ marginLeft: 'auto', fontSize: '0.75rem' }}>{formatDate(item.completed_at)}</span>
-            </div>
-          </>
-        );
-
-      case 'king':
-        return (
-          <>
-            <div className="card-badge-row">
-              <span className="badge badge-coding" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                Daily Grind King
-              </span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Heavy Log</span>
-            </div>
-            <h3 className="card-title">Logged {item.hours}h {item.minutes}m</h3>
-            <p className="card-desc">{item.description}</p>
-            <div className="grace-text" style={{ color: '#34d399', backgroundColor: 'rgba(16, 185, 129, 0.08)', borderColor: '#10b981' }}>
-              👑 {item.grace_word}
-            </div>
-            <div className="card-meta">
-              <div className="card-avatar" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(6, 182, 212, 0.3) 100%)' }}>{initials}</div>
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
-              <span style={{ marginLeft: 'auto', fontSize: '0.75rem' }}>{formatDate(item.date)}</span>
-            </div>
-          </>
-        );
-
-      case 'champion':
-        return (
-          <>
-            <div className="card-badge-row">
-              <span className="badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
-                Consistency Champion
-              </span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>5-Day Grind</span>
-            </div>
-            <h3 className="card-title" style={{ fontSize: '0.95rem' }}>Averages {item.average_hours}h/day</h3>
-            <p className="card-desc" style={{ fontSize: '0.8rem' }}>Logged a total of {item.total_hours} hours over the last 5 days. Daily target consistency maintained!</p>
-            
-            <div className="mini-chart">
-              <svg width="100%" height="70" viewBox="0 0 270 70">
-                <defs>
-                  <linearGradient id={`grad-${item.user_id}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.4" />
-                    <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-                {(() => {
-                  const vals = item.chart_data?.values || [];
-                  const maxVal = Math.max(2.5, ...vals);
-                  const points = vals.map((v: number, idx: number) => {
-                    const x = idx * 48 + 20;
-                    const y = 50 - (v / maxVal) * 40;
-                    return { x, y, val: v };
-                  });
-                  const pathD = points.reduce((acc: string, p: any, idx: number) => {
-                    return acc + (idx === 0 ? `M ${p.x} ${p.y}` : ` L ${p.x} ${p.y}`);
-                  }, '');
-                  const areaD = points.length > 0 
-                    ? `${pathD} L ${points[points.length - 1].x} 52 L ${points[0].x} 52 Z`
-                    : '';
-
-                  return (
-                    <>
-                      {areaD && <path d={areaD} fill={`url(#grad-${item.user_id})`} />}
-                      {pathD && <path d={pathD} fill="none" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-                      {points.map((p: any, idx: number) => (
-                        <g key={idx}>
-                          <circle cx={p.x} cy={p.y} r="3" fill="#090d16" stroke="#fbbf24" strokeWidth="2" />
-                          <text x={p.x} y="62" fontSize="7" fill="var(--text-muted)" textAnchor="middle">
-                            {item.chart_data?.labels[idx] || ''}
-                          </text>
-                        </g>
-                      ))}
-                    </>
-                  );
-                })()}
-              </svg>
-            </div>
-            
-            <div className="card-meta">
-              <div className="card-avatar" style={{ background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(239, 68, 68, 0.3) 100%)' }}>{initials}</div>
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
-              <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#fbbf24', fontWeight: 600 }}>Consistency King</span>
-            </div>
-          </>
-        );
-
-      case 'streak':
-        return (
-          <>
-            <div className="card-badge-row">
-              <span className="badge" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                Streak Star
-              </span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Streak</span>
-            </div>
-            <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span>{item.current_streak} Day Streak</span>
-              <span className="pulsing-flame">🔥</span>
-            </h3>
-            <p className="card-desc">Logging hours consistently! Longest streak: {item.longest_streak} days.</p>
-            <div className="grace-text" style={{ color: '#f87171', backgroundColor: 'rgba(239, 68, 68, 0.08)', borderColor: '#ef4444' }}>
-              ⚡ Keeping the fire burning! Unstoppable.
-            </div>
-            <div className="card-meta">
-              <div className="card-avatar" style={{ background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(245, 158, 11, 0.3) 100%)' }}>{initials}</div>
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>{item.user_name}</span>
-              <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>On Fire</span>
-            </div>
-          </>
-        );
-
-      default:
-        return null;
+  const formatTimeAgo = (isoString: string) => {
+    if (!isoString) return '';
+    try {
+      const diffMs = Date.now() - new Date(isoString).getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return 'just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      return formatDate(isoString);
+    } catch {
+      return '';
     }
   };
 
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
 
+  const legends = data?.weekly_legends || [];
+  const silver = legends[1] || null;
+  const gold = legends[0] || null;
+  const bronze = legends[2] || null;
+
   return (
     <Layout>
+      <canvas
+        ref={canvasConfettiRef}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          pointerEvents: 'none',
+          zIndex: 9999
+        }}
+      />
+
       <div className="gallery-container">
-        <div className="page-header" style={{ marginBottom: '1.5rem' }}>
-          <div className="page-title-section">
-            <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span>🌟 Developer Showcase Zone</span>
-            </h1>
-            <span className="page-subtitle">Celebrating recent milestones, consistent grinds, and outstanding achievements!</span>
-          </div>
+        <div className="spotlight-header">
+          <div className="spotlight-header-glow"></div>
+          <h1 className="spotlight-title">
+            <span className="gradient-text">Spotlight Gallery</span> 🌟
+          </h1>
+          <p className="spotlight-subtitle">
+            Celebrating recent milestones, consistent grinds, and outstanding achievements. Elevate your build!
+          </p>
         </div>
 
-        {/* CONTROLS BAR */}
-        <div className="gallery-controls" style={{ justifyContent: 'flex-end', display: isMobile ? 'none' : 'flex' }}>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            {viewMode === 'canvas' && !isMobile && (
-              <button className="btn btn-secondary" onClick={handleTidyUp} style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
-                Tidy Up Board
-              </button>
-            )}
-            {!isMobile && (
-              <div className="view-toggle">
-                <button className={`toggle-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>
-                  Grid View
-                </button>
-                <button className={`toggle-btn ${viewMode === 'canvas' ? 'active' : ''}`} onClick={() => setViewMode('canvas')}>
-                  Canvas Zone
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* RENDER VIEW */}
-        {items.length === 0 ? (
-          <div className="glass-card empty-state" style={{ padding: '4rem 2rem' }}>
-            <Award size={48} className="empty-icon" />
-            <h3>No recent achievements to showcase yet</h3>
-            <p>Keep logging your hours, finishing roadmap topics, and completing projects to showcase your hard work!</p>
-          </div>
-        ) : viewMode === 'grid' ? (
-          <div className="gallery-grid">
-            {items.map(item => (
-              <div 
-                key={item.uniqueId} 
-                className={`showcase-card ${item.type}-card`}
-                style={{ cursor: item.type === 'project' ? 'pointer' : 'default' }}
-                onClick={(e) => {
-                  if ((e.target as HTMLElement).closest('.highfive-btn') || (e.target as HTMLElement).closest('.btn-secondary') || (e.target as HTMLElement).closest('a')) {
-                    return;
-                  }
-                  if (item.type === 'project') {
-                    setSelectedProject(item);
-                  }
-                }}
-              >
-                {renderCardContent(item)}
-                <div className="card-action-row">
-                  <button className="highfive-btn" onClick={handleHighFive}>
-                    👏 High Five
-                  </button>
-                  {item.type === 'project' && (
-                    <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600 }} onClick={() => setSelectedProject(item)}>
-                      🔍 Details
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div 
-            ref={canvasRef}
-            className="canvas-board"
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            style={{ height: `${Math.max(700, Math.ceil(items.length / 3) * 270 + 150)}px` }}
-          >
-            <div className="canvas-instruction">
-              <Sliders size={14} /> Drag elements by their top headers to arrange your showcase zone!
+        {/* Section 5: Live Activity Feed */}
+        {data?.activities && data.activities.length > 0 && (
+          <div className="activity-ticker-wrap">
+            <div className="activity-ticker-title">
+              <span className="ticker-pulse"></span>
+              LIVE FEED
             </div>
-            
-            {items.map(item => {
-              const isDragging = draggedId === item.uniqueId;
-              const xCoord = coords[item.uniqueId]?.x ?? 20;
-              const yCoord = coords[item.uniqueId]?.y ?? 80;
-              
-              return (
-                <div 
-                  key={item.uniqueId}
-                  className={`showcase-card ${item.type}-card ${isDragging ? 'is-dragging' : ''}`}
-                  style={{
-                    transform: `translate3d(${xCoord}px, ${yCoord}px, 0)`,
-                    transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.19, 1, 0.22, 1)',
-                    zIndex: isDragging ? 100 : undefined,
-                    cursor: isDragging ? 'grabbing' : (item.type === 'project' ? 'pointer' : 'grab')
-                  }}
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest('.highfive-btn') || (e.target as HTMLElement).closest('.btn-secondary') || (e.target as HTMLElement).closest('a') || (e.target as HTMLElement).closest('.card-drag-handle')) {
-                      return;
-                    }
-                    if (item.type === 'project') {
-                      setSelectedProject(item);
-                    }
-                  }}
-                >
-                  <div className="card-drag-handle" onMouseDown={(e) => handleMouseDown(e, item.uniqueId)}>
-                    ⋮⋮ DRAG TO MOVE
+            <div className="activity-ticker">
+              <div className="ticker-track">
+                {[...data.activities, ...data.activities].map((act: any, idx: number) => (
+                  <div key={`${act.id}-${idx}`} className="ticker-item">
+                    <span className="ticker-icon">⚡</span>
+                    <strong className="ticker-user">{act.user_name}</strong>
+                    <span className="ticker-text">{act.detail}</span>
+                    <span className="ticker-time">{formatTimeAgo(act.created_at)}</span>
                   </div>
-                  {renderCardContent(item)}
-                  <div className="card-action-row">
-                    <button className="highfive-btn" onClick={handleHighFive}>
-                      👏 High Five
-                    </button>
-                    {item.type === 'project' && (
-                      <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600 }} onClick={() => setSelectedProject(item)}>
-                        🔍 Details
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            </div>
           </div>
         )}
+
+        {/* Section 4: Weekly Legends */}
+        <div className="weekly-legends-section">
+          <div className="section-header-modern">
+            <div className="header-icon-box">⭐</div>
+            <div>
+              <h2 className="section-title-modern">Weekly Legends</h2>
+              <p className="section-subtitle-modern">Top contributors this week. Keep grinding to claim the crown!</p>
+            </div>
+          </div>
+          
+          <div className="podium-wrapper">
+            <div className="podium-container">
+              {/* 2nd Place: Silver */}
+              <div className="podium-step-wrapper silver-step">
+                {silver ? (
+                  <>
+                    <div className="podium-user-avatar silver-avatar">
+                      {silver.user_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="podium-user-name">{silver.user_name}</div>
+                    <div className="podium-user-hours">{silver.total_hours}h logged</div>
+                    <div className="podium-box podium-silver">
+                      <div className="podium-rank-badge">🥈</div>
+                      <div className="podium-rank-number">2nd</div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="podium-empty-box podium-silver">
+                    <div className="podium-rank-badge">🥈</div>
+                    <div className="podium-empty-text">No Claim</div>
+                  </div>
+                )}
+              </div>
+
+              {/* 1st Place: Gold */}
+              <div className="podium-step-wrapper gold-step">
+                {gold ? (
+                  <>
+                    <div className="podium-trophy">👑</div>
+                    <div className="podium-user-avatar gold-avatar">
+                      {gold.user_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="podium-user-name">{gold.user_name}</div>
+                    <div className="podium-user-hours">{gold.total_hours}h logged</div>
+                    <div className="podium-box podium-gold">
+                      <div className="podium-rank-badge">🥇</div>
+                      <div className="podium-rank-number">1st</div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="podium-empty-box podium-gold">
+                    <div className="podium-rank-badge">🥇</div>
+                    <div className="podium-empty-text">No Claim</div>
+                  </div>
+                )}
+              </div>
+
+              {/* 3rd Place: Bronze */}
+              <div className="podium-step-wrapper bronze-step">
+                {bronze ? (
+                  <>
+                    <div className="podium-user-avatar bronze-avatar">
+                      {bronze.user_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="podium-user-name">{bronze.user_name}</div>
+                    <div className="podium-user-hours">{bronze.total_hours}h logged</div>
+                    <div className="podium-box podium-bronze">
+                      <div className="podium-rank-badge">🥉</div>
+                      <div className="podium-rank-number">3rd</div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="podium-empty-box podium-bronze">
+                    <div className="podium-rank-badge">🥉</div>
+                    <div className="podium-empty-text">No Claim</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 1: Featured Projects */}
+        <div className="gallery-section">
+          <div className="section-header-modern">
+            <div className="header-icon-box">🚀</div>
+            <div>
+              <h2 className="section-title-modern">Featured Projects</h2>
+              <p className="section-subtitle-modern">Recent creations launched in the last 3 days. Click to explore logs!</p>
+            </div>
+          </div>
+          
+          {data?.projects && data.projects.length > 0 ? (
+            <div className="featured-projects-grid">
+              {data.projects.map((project: any) => {
+                const initials = project.user_name?.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+                return (
+                  <div 
+                    key={project.id} 
+                    className="premium-project-card"
+                    onClick={() => setSelectedProject(project)}
+                  >
+                    <div className="project-card-header">
+                      <span className="project-tag">🚀 NEW RELEASE</span>
+                      <span className="project-time-tag">{formatTimeAgo(project.date)}</span>
+                    </div>
+                    
+                    <h3 className="project-card-name">{project.name}</h3>
+                    
+                    <div className="project-card-footer">
+                      <div className="project-card-creator">
+                        <div className="creator-avatar" style={{ background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%)' }}>
+                          {initials}
+                        </div>
+                        <div className="creator-info">
+                          <span className="creator-label">BUILDER</span>
+                          <span className="creator-name">{project.user_name}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="project-card-action">
+                        <span className="action-btn-circle">→</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty-section-state">
+              <div className="empty-icon-wrap">🚀</div>
+              <h3>No projects launched in the last 3 days</h3>
+              <p>Start a new project and add development logs to show it here!</p>
+            </div>
+          )}
+        </div>
+
+        {/* Section 2: Hard Work Spotlight */}
+        <div className="gallery-section">
+          <div className="section-header-modern">
+            <div className="header-icon-box">🔥</div>
+            <div>
+              <h2 className="section-title-modern">Hard Work Spotlight</h2>
+              <p className="section-subtitle-modern">Developers who crushed it with 2.5+ hours of intense work in the last 24 hours!</p>
+            </div>
+          </div>
+          
+          {data?.daily_kings && data.daily_kings.length > 0 ? (
+            <div className="hard-work-grid">
+              {data.daily_kings.map((king: any) => {
+                const initials = king.user_name?.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+                return (
+                  <div key={king.id} className="hot-neon-card">
+                    <div className="neon-card-header">
+                      <span className="neon-badge-grind">🔥 DAILY GRIND</span>
+                      <span className="neon-card-hours">{king.hours}h {king.minutes}m</span>
+                    </div>
+                    
+                    <div className="neon-card-category">{king.category}</div>
+                    
+                    <p className="neon-card-desc">"{king.description}"</p>
+                    
+                    <div className="neon-grace-word">
+                      💡 {king.grace_word}
+                    </div>
+                    
+                    <div className="neon-card-footer">
+                      <div className="creator-avatar" style={{ background: 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)' }}>
+                        {initials}
+                      </div>
+                      <div className="creator-info">
+                        <span className="creator-name">{king.user_name}</span>
+                        <span className="creator-username">@{king.username}</span>
+                      </div>
+                      <button className="highfive-btn-reaction" onClick={handleHighFive}>
+                        👏 React
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty-section-state">
+              <div className="empty-icon-wrap">🔥</div>
+              <h3>No 2.5+ hour sessions logged in the last 24 hours</h3>
+              <p>Log a session of 2.5 hours or more to claim the spotlight!</p>
+            </div>
+          )}
+        </div>
+
+        {/* Section 3: Learning Achievements */}
+        <div className="gallery-section">
+          <div className="section-header-modern">
+            <div className="header-icon-box">🏆</div>
+            <div>
+              <h2 className="section-title-modern">Learning Achievements</h2>
+              <p className="section-subtitle-modern">Developers who completely cleared a technology roadmap in the last 24 hours!</p>
+            </div>
+          </div>
+          
+          {data?.completed_techs && data.completed_techs.length > 0 ? (
+            <div className="learning-achievements-grid">
+              {data.completed_techs.map((completion: any) => {
+                const initials = completion.user_name?.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+                return (
+                  <div key={completion.id} className="tech-celebration-card">
+                    <div className="celebration-badge">🏆 LEVEL UP</div>
+                    
+                    <h3 className="celebration-title">Roadmap Mastered!</h3>
+                    
+                    <div className="celebration-tech-name">
+                      <span>📚</span> {completion.tech_name}
+                    </div>
+                    
+                    <p className="celebration-desc">
+                      <strong>{completion.user_name}</strong> completed all study topics and cleared the entire roadmap!
+                    </p>
+                    
+                    <div className="celebration-footer">
+                      <div className="creator-avatar" style={{ background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)' }}>
+                        {initials}
+                      </div>
+                      <div className="creator-info">
+                        <span className="creator-name">{completion.user_name}</span>
+                        <span className="creator-time">Cleared at {completion.completed_time}</span>
+                      </div>
+                      <button className="highfive-btn-reaction" onClick={handleHighFive}>
+                        🎉 React
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty-section-state">
+              <div className="empty-icon-wrap">🏆</div>
+              <h3>No technologies cleared in the last 24 hours</h3>
+              <p>Complete all checklist topics in any roadmap to celebrate your milestone here!</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* PROJECT DETAILS MODAL OVERLAY */}
@@ -2871,8 +2877,8 @@ export function Gallery() {
           <div className="project-detail-content" onClick={(e) => e.stopPropagation()}>
             <div className="project-detail-header">
               <div className="project-detail-title-section">
-                <span className={`badge ${selectedProject.status === 'Completed' ? 'badge-completed' : 'badge-active'}`} style={{ width: 'fit-content' }}>
-                  {selectedProject.status}
+                <span className="badge badge-completed" style={{ width: 'fit-content', background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%)', color: 'white', border: 'none' }}>
+                  🚀 {selectedProject.status}
                 </span>
                 <h2 className="project-detail-title">{selectedProject.name}</h2>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
@@ -2890,23 +2896,23 @@ export function Gallery() {
                 <span className="project-detail-stat-value">{selectedProject.hours}h {selectedProject.minutes}m</span>
               </div>
               <div className="project-detail-stat-card" style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                <span className="project-detail-stat-label">GitHub URL</span>
+                <span className="project-detail-stat-label">GitHub</span>
                 <span className="project-detail-stat-value" style={{ fontSize: '0.85rem' }}>
                   {selectedProject.github_url ? (
-                    <a href={selectedProject.github_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
-                      Open Code ↗
+                    <a href={selectedProject.github_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>
+                      Code ↗
                     </a>
-                  ) : 'Not Linked'}
+                  ) : <span style={{ color: 'var(--text-muted)' }}>None</span>}
                 </span>
               </div>
               <div className="project-detail-stat-card">
-                <span className="project-detail-stat-label">Host URL</span>
+                <span className="project-detail-stat-label">Host</span>
                 <span className="project-detail-stat-value" style={{ fontSize: '0.85rem' }}>
                   {selectedProject.host_url ? (
-                    <a href={selectedProject.host_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-secondary)', textDecoration: 'none' }}>
-                      Live Demo ↗
+                    <a href={selectedProject.host_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-secondary)', textDecoration: 'none', fontWeight: 600 }}>
+                      Demo ↗
                     </a>
-                  ) : 'Not Linked'}
+                  ) : <span style={{ color: 'var(--text-muted)' }}>None</span>}
                 </span>
               </div>
             </div>
@@ -2938,8 +2944,14 @@ export function Gallery() {
                   ))}
                 </div>
               ) : (
-                <p className="project-detail-desc" style={{ fontStyle: 'italic', fontSize: '0.85rem' }}>No development logs have been recorded for this project yet.</p>
+                <p className="project-detail-desc" style={{ fontStyle: 'italic', fontSize: '0.85rem', color: 'var(--text-muted)' }}>No development logs have been recorded for this project yet.</p>
               )}
+            </div>
+            
+            <div className="project-detail-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+              <button className="highfive-btn" onClick={handleHighFive} style={{ width: '100%', justifyContent: 'center', padding: '0.6rem' }}>
+                👏 Give a High Five!
+              </button>
             </div>
           </div>
         </div>
