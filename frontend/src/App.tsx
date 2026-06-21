@@ -2632,7 +2632,7 @@ export function Gallery() {
             <div className="header-icon-box">⭐</div>
             <div>
               <h2 className="section-title-modern">Weekly Legends</h2>
-              <p className="section-subtitle-modern">Top contributors this week. Keep grinding to claim the crown!</p>
+              <p className="section-subtitle-modern">Top contributors of the previous week. Grinds are locked in!</p>
             </div>
           </div>
           

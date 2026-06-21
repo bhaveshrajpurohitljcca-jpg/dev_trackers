@@ -1112,8 +1112,11 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
                     "completed_at": latest_completion_at.isoformat()
                 })
 
-    # 4. Weekly Legends (top 3 contributors for current week starting Sunday)
-    start_of_week = today - timedelta(days=(today.weekday() + 1) % 7)
+    # 4. Weekly Legends (top 3 contributors for previous week starting Sunday and ending Saturday)
+    start_of_current_week = today - timedelta(days=(today.weekday() + 1) % 7)
+    start_of_prev_week = start_of_current_week - timedelta(days=7)
+    end_of_prev_week = start_of_current_week - timedelta(days=1)
+    
     active_users = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).all()
     user_ids = [u.id for u in active_users]
     
@@ -1122,7 +1125,8 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
         func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)
     ).filter(
         models.DailyLog.user_id.in_(user_ids),
-        models.DailyLog.date >= start_of_week
+        models.DailyLog.date >= start_of_prev_week,
+        models.DailyLog.date <= end_of_prev_week
     ).group_by(models.DailyLog.user_id).all() if user_ids else []
     
     weekly_hours_map = {user_id: (minutes or 0) / 60.0 for user_id, minutes in weekly_hours_q}
