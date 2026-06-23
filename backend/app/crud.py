@@ -487,6 +487,7 @@ def update_settings(db: Session, settings_data: schemas.SettingsUpdate):
     settings_rec.daily_log_deadline = settings_data.daily_log_deadline
     settings_rec.reminder_time = settings_data.reminder_time
     settings_rec.grace_period_minutes = settings_data.grace_period_minutes
+    settings_rec.day_cutoff_time = settings_data.day_cutoff_time
     settings_rec.smtp_host = settings_data.smtp_host
     settings_rec.smtp_port = settings_data.smtp_port
     settings_rec.smtp_user = settings_data.smtp_user

@@ -17,7 +17,7 @@ def run_manual_seeding():
     inspector = inspect(engine)
     if "settings" in inspector.get_table_names():
         columns = [col["name"] for col in inspector.get_columns("settings")]
-        missing_columns = [col for col in ["smtp_host", "smtp_port", "smtp_user", "smtp_password"] if col not in columns]
+        missing_columns = [col for col in ["smtp_host", "smtp_port", "smtp_user", "smtp_password", "day_cutoff_time"] if col not in columns]
         
         if missing_columns:
             db_mig = SessionLocal()
@@ -26,9 +26,10 @@ def run_manual_seeding():
                 if dialect == "sqlite":
                     columns_to_add = [
                         ("smtp_host", "VARCHAR", "'smtp.gmail.com'"),
-                        ("smtp_port", "INTEGER", "587"),
+                        ("smtp_port", "INTEGER", 587),
                         ("smtp_user", "VARCHAR", "''"),
-                        ("smtp_password", "VARCHAR", "''")
+                        ("smtp_password", "VARCHAR", "''"),
+                        ("day_cutoff_time", "VARCHAR", "'00:00'")
                     ]
                     for col_name, col_type, col_default in columns_to_add:
                         if col_name in missing_columns:
@@ -41,7 +42,7 @@ def run_manual_seeding():
                 else:
                     for col_name in missing_columns:
                         col_type = "INTEGER" if col_name == "smtp_port" else "VARCHAR"
-                        col_default = "587" if col_name == "smtp_port" else "''"
+                        col_default = "587" if col_name == "smtp_port" else ("'00:00'" if col_name == "day_cutoff_time" else "''")
                         db_mig.execute(text(f"ALTER TABLE settings ADD COLUMN IF NOT EXISTS {col_name} {col_type} DEFAULT {col_default}"))
                         print(f"Added column {col_name} to settings table.")
                     db_mig.commit()

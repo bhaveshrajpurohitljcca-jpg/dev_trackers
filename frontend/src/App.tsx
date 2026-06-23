@@ -1137,10 +1137,43 @@ export function WorkLogs() {
   const [logMinutes, setLogMinutes] = useState('');
   const [description, setDescription] = useState('');
 
-  // Filters (None, we removed them)
-  const fetchLogs = async () => {
+  // Week offset (0 = current week, 1 = previous week, etc.)
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+
+  const getWeekRange = (offset: number) => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0 is Sunday, 1 is Monday...
+    
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - currentDay - (offset * 7));
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+    
+    return { startOfWeek, endOfWeek };
+  };
+
+  const formatWeekLabel = (offset: number) => {
+    if (offset === 0) return 'Current Week';
+    if (offset === 1) return 'Previous Week';
+    return `${offset} Weeks Ago`;
+  };
+
+  const formatDateRange = (start: Date, end: Date) => {
+    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+    return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}`;
+  };
+
+  const fetchLogs = async (offset: number) => {
     try {
-      const data = await api.getLogs({});
+      setLoading(true);
+      const { startOfWeek, endOfWeek } = getWeekRange(offset);
+      const data = await api.getLogs({
+        startDate: toLocalDateString(startOfWeek),
+        endDate: toLocalDateString(endOfWeek)
+      });
       setLogs(data);
     } catch (err) {
       console.error(err);
@@ -1150,8 +1183,8 @@ export function WorkLogs() {
   };
 
   useEffect(() => {
-    fetchLogs();
-  }, []);
+    fetchLogs(weekOffset);
+  }, [weekOffset]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1204,7 +1237,8 @@ export function WorkLogs() {
       setLogHours('');
       setLogMinutes('');
       setDescription('');
-      fetchLogs();
+      setWeekOffset(0);
+      fetchLogs(0);
     } catch (err: any) {
       showError(err.message || 'Failed to log work');
     } finally {
@@ -1303,6 +1337,50 @@ export function WorkLogs() {
 
       {/* LOGS TABLE */}
       <div className="glass-card" style={{ padding: 0 }}>
+        <div className="week-navigation" style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          padding: '1rem 1.5rem', 
+          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+          gap: '1rem',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="badge badge-active" style={{ fontSize: '0.85rem' }}>
+              {formatWeekLabel(weekOffset)}
+            </span>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+              ({formatDateRange(getWeekRange(weekOffset).startOfWeek, getWeekRange(weekOffset).endOfWeek)})
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button 
+              className="btn btn-outline" 
+              onClick={() => setWeekOffset(prev => prev + 1)}
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+            >
+              ← Previous Week
+            </button>
+            <button 
+              className="btn btn-outline" 
+              onClick={() => setWeekOffset(0)}
+              disabled={weekOffset === 0}
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+            >
+              Current Week
+            </button>
+            <button 
+              className="btn btn-outline" 
+              onClick={() => setWeekOffset(prev => Math.max(0, prev - 1))}
+              disabled={weekOffset === 0}
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+            >
+              Next Week →
+            </button>
+          </div>
+        </div>
+
         {loading ? (
           <div style={{ padding: '3rem', textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }}></div></div>
         ) : logs.length > 0 ? (
@@ -2646,7 +2724,7 @@ export function Gallery() {
                       {silver.user_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
                     </div>
                     <div className="podium-user-name">{silver.user_name}</div>
-                    <div className="podium-user-hours">{silver.total_hours}h logged</div>
+                    <div className="podium-user-hours">{formatHours(silver.total_hours, silver.total_minutes)} logged</div>
                     <div className="podium-box podium-silver">
                       <div className="podium-rank-badge">🥈</div>
                       <div className="podium-rank-number">2nd</div>
@@ -2669,7 +2747,7 @@ export function Gallery() {
                       {gold.user_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
                     </div>
                     <div className="podium-user-name">{gold.user_name}</div>
-                    <div className="podium-user-hours">{gold.total_hours}h logged</div>
+                    <div className="podium-user-hours">{formatHours(gold.total_hours, gold.total_minutes)} logged</div>
                     <div className="podium-box podium-gold">
                       <div className="podium-rank-badge">🥇</div>
                       <div className="podium-rank-number">1st</div>
@@ -2691,7 +2769,7 @@ export function Gallery() {
                       {bronze.user_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
                     </div>
                     <div className="podium-user-name">{bronze.user_name}</div>
-                    <div className="podium-user-hours">{bronze.total_hours}h logged</div>
+                    <div className="podium-user-hours">{formatHours(bronze.total_hours, bronze.total_minutes)} logged</div>
                     <div className="podium-box podium-bronze">
                       <div className="podium-rank-badge">🥉</div>
                       <div className="podium-rank-number">3rd</div>
@@ -2890,12 +2968,8 @@ export function Gallery() {
               </button>
             </div>
 
-            <div className="project-detail-stats">
+            <div className="project-detail-stats" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
               <div className="project-detail-stat-card">
-                <span className="project-detail-stat-label">Total Invested</span>
-                <span className="project-detail-stat-value">{selectedProject.hours}h {selectedProject.minutes}m</span>
-              </div>
-              <div className="project-detail-stat-card" style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
                 <span className="project-detail-stat-label">GitHub</span>
                 <span className="project-detail-stat-value" style={{ fontSize: '0.85rem' }}>
                   {selectedProject.github_url ? (
@@ -2905,7 +2979,7 @@ export function Gallery() {
                   ) : <span style={{ color: 'var(--text-muted)' }}>None</span>}
                 </span>
               </div>
-              <div className="project-detail-stat-card">
+              <div className="project-detail-stat-card" style={{ borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
                 <span className="project-detail-stat-label">Host</span>
                 <span className="project-detail-stat-value" style={{ fontSize: '0.85rem' }}>
                   {selectedProject.host_url ? (
@@ -4274,6 +4348,7 @@ export function AdminSettings() {
   const [deadline, setDeadline] = useState('');
   const [reminder, setReminder] = useState('');
   const [grace, setGrace] = useState('');
+  const [dayCutoffTime, setDayCutoffTime] = useState('00:00');
 
   // SMTP States
   const [smtpHost, setSmtpHost] = useState('smtp.gmail.com');
@@ -4307,6 +4382,7 @@ export function AdminSettings() {
       setDeadline(s.daily_log_deadline);
       setReminder(s.reminder_time);
       setGrace(s.grace_period_minutes.toString());
+      setDayCutoffTime(s.day_cutoff_time || '00:00');
       setSmtpHost(s.smtp_host || 'smtp.gmail.com');
       setSmtpPort((s.smtp_port || 587).toString());
       setSmtpUser(s.smtp_user || '');
@@ -4332,7 +4408,7 @@ export function AdminSettings() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!deadline || !reminder || !grace) {
+    if (!deadline || !reminder || !grace || !dayCutoffTime) {
       showError('Please fill in all fields');
       return;
     }
@@ -4355,6 +4431,7 @@ export function AdminSettings() {
         daily_log_deadline: deadline,
         reminder_time: reminder,
         grace_period_minutes: g,
+        day_cutoff_time: dayCutoffTime,
         smtp_host: smtpHost,
         smtp_port: p,
         smtp_user: smtpUser,
@@ -4539,6 +4616,20 @@ export function AdminSettings() {
                   disabled={saving}
                 />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Minutes to allow logs past deadline</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="cutoff-input">Day Cutoff / Day End Time</label>
+                <input 
+                  id="cutoff-input"
+                  type="text" 
+                  placeholder="00:00"
+                  className="form-input" 
+                  value={dayCutoffTime}
+                  onChange={(e) => setDayCutoffTime(e.target.value)}
+                  disabled={saving}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Format: HH:MM (24-hour clock). Any logs submitted before this cutoff on the next calendar day will automatically be logged for the previous day.</span>
               </div>
 
               {/* SMTP Settings Segment */}

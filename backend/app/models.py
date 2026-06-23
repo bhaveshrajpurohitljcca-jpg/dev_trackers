@@ -200,6 +200,7 @@ class Settings(Base):
     daily_log_deadline = Column(String, nullable=False, default="22:00")  # HH:MM format
     reminder_time = Column(String, nullable=False, default="21:30")      # HH:MM format
     grace_period_minutes = Column(Integer, nullable=False, default=15)
+    day_cutoff_time = Column(String, nullable=False, default="00:00")     # HH:MM format
     smtp_host = Column(String, nullable=True, default="smtp.gmail.com")
     smtp_port = Column(Integer, nullable=True, default=587)
     smtp_user = Column(String, nullable=True, default="")

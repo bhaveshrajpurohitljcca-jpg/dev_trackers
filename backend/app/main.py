@@ -726,25 +726,34 @@ def log_work(log_data: schemas.DailyLogCreate, db: Session = Depends(get_db), cu
     sys_settings = crud.get_settings(db)
     deadline_str = sys_settings.daily_log_deadline
     grace_mins = sys_settings.grace_period_minutes
+    day_cutoff_str = getattr(sys_settings, "day_cutoff_time", "00:00")
     
-    # Check if user is logging for today and if it is past deadline
-    # Note: local server time is used
-    log_date = log_data.date
-    today = get_ist_date()
+    # Parse cutoff time
+    try:
+        cutoff_time = datetime.strptime(day_cutoff_str, "%H:%M").time()
+    except Exception:
+        cutoff_time = datetime.strptime("00:00", "%H:%M").time()
+        
+    now_ist = get_ist_time()
     
-    # If logging for today
-    if log_date == today:
-        now_time = get_ist_time().time()
+    # Determine the target date based on day_cutoff_time
+    if now_ist.time() < cutoff_time:
+        target_date = now_ist.date() - timedelta(days=1)
+    else:
+        target_date = now_ist.date()
+        
+    # Override log date
+    log_data.date = target_date
+    
+    # Check if past deadline
+    try:
         deadline_time = datetime.strptime(deadline_str, "%H:%M").time()
-        
-        # Calculate deadline with grace period
-        deadline_dt = datetime.combine(today, deadline_time) + timedelta(minutes=grace_mins)
-        now_dt = get_ist_time()
-        
-        if now_dt > deadline_dt:
-            # We still allow logging but it will be flagged or we can just log it
-            # The prompt says "Daily Work Log Deadline (10:00 PM)". Let's allow it but record activity as "late log"
+        deadline_dt = datetime.combine(target_date, deadline_time) + timedelta(minutes=grace_mins)
+        if now_ist > deadline_dt:
+            # Past deadline, we still allow logging but it will be flagged as normal
             pass
+    except Exception:
+        pass
             
     try:
         db_log = crud.create_daily_log(db, current_user.id, log_data)
@@ -1172,19 +1181,22 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
         models.DailyLog.date <= end_of_prev_week
     ).group_by(models.DailyLog.user_id).all() if user_ids else []
     
-    weekly_hours_map = {user_id: (minutes or 0) / 60.0 for user_id, minutes in weekly_hours_q}
+    weekly_hours_map = {user_id: (minutes or 0) for user_id, minutes in weekly_hours_q}
     
     weekly_contributors = []
     for u in active_users:
-        hours = round(weekly_hours_map.get(u.id, 0.0), 2)
+        total_mins = weekly_hours_map.get(u.id, 0)
+        h = total_mins // 60
+        m = total_mins % 60
         weekly_contributors.append({
             "user_id": u.id,
             "user_name": u.full_name,
             "username": u.username,
-            "total_hours": hours
+            "total_hours": h,
+            "total_minutes": m
         })
         
-    weekly_contributors.sort(key=lambda x: x["total_hours"], reverse=True)
+    weekly_contributors.sort(key=lambda x: (x["total_hours"] * 60 + x["total_minutes"]), reverse=True)
     weekly_legends = weekly_contributors[:3]
 
     # 5. Live Activity Feed (last 24 hours activities)

@@ -106,6 +106,7 @@ export interface SystemSettings {
   daily_log_deadline: string;
   reminder_time: string;
   grace_period_minutes: number;
+  day_cutoff_time?: string;
   smtp_host?: string;
   smtp_port?: number;
   smtp_user?: string;

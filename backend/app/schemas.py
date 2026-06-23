@@ -137,6 +137,7 @@ class SettingsUpdate(BaseModel):
     daily_log_deadline: str = Field(pattern=r"^\d{2}:\d{2}$")
     reminder_time: str = Field(pattern=r"^\d{2}:\d{2}$")
     grace_period_minutes: int = Field(ge=0, le=120)
+    day_cutoff_time: str = Field(default="00:00", pattern=r"^\d{2}:\d{2}$")
     smtp_host: Optional[str] = "smtp.gmail.com"
     smtp_port: Optional[int] = 587
     smtp_user: Optional[str] = ""
