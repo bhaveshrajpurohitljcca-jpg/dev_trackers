@@ -1142,6 +1142,8 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
         
         if len(completions) == len(topics):
             latest_completion_at = max(c.completed_at for c in completions)
+            if latest_completion_at.tzinfo is not None:
+                latest_completion_at = latest_completion_at.replace(tzinfo=None)
             if latest_completion_at >= cutoff_24h:
                 completed_techs.append({
                     "id": f"{user.id}-{tech.id}",
