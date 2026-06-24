@@ -99,7 +99,46 @@ export interface LeaderboardUser {
   longest_streak: number;
 }
 
-// Achievements interface removed
+export interface Badge {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  category: string;
+  rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
+  icon: string;
+  required_value: number;
+  department: string | null;
+}
+
+export interface UserBadge {
+  badge: Badge;
+  is_unlocked: boolean;
+  progress: number;
+  target_value: number;
+  earned_at: string | null;
+}
+
+export interface BadgeUnlockHistory {
+  id: number;
+  badge_id: number;
+  badge_name: string;
+  category: string;
+  rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
+  unlock_date: string;
+  unlock_time: string;
+  unlock_timestamp: string;
+  unlock_source: string;
+}
+
+export interface BadgeStats {
+  total_badges: number;
+  total_earned: number;
+  completion_rate: number;
+  rarity_breakdown: Record<string, number>;
+  category_breakdown: Record<string, number>;
+  user_distribution: { user_id: number; user_name: string; badges_count: number }[];
+}
 
 export interface SystemSettings {
   id: number;
@@ -386,5 +425,29 @@ export const api = {
 
   async getShowcase(): Promise<any> {
     return request<any>('/showcase');
+  },
+
+  // Badges & Progression
+  async getMyBadges(): Promise<UserBadge[]> {
+    return request<UserBadge[]>('/badges/my');
+  },
+
+  async getBadgeHistory(): Promise<BadgeUnlockHistory[]> {
+    return request<BadgeUnlockHistory[]>('/badges/history');
+  },
+
+  async adminGetBadgeStats(): Promise<BadgeStats> {
+    return request<BadgeStats>('/admin/badges/stats');
+  },
+
+  async adminRecalculateBadges(): Promise<{ detail: string }> {
+    return request<{ detail: string }>('/admin/badges/recalculate', { method: 'POST' });
+  },
+
+  async adminForceAwardBadge(userId: number, badgeCode: string): Promise<{ detail: string }> {
+    return request<{ detail: string }>('/admin/badges/award', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, badge_code: badgeCode })
+    });
   },
 };

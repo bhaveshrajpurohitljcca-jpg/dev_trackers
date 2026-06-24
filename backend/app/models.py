@@ -37,6 +37,10 @@ class User(Base):
     project_logs = relationship("ProjectLog", back_populates="user", cascade="all, delete-orphan")
     streak = relationship("Streak", back_populates="user", uselist=False, cascade="all, delete-orphan")
     activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
+    badges = relationship("UserBadge", back_populates="user", cascade="all, delete-orphan")
+    badge_progress = relationship("BadgeProgress", back_populates="user", cascade="all, delete-orphan")
+    badge_unlock_history = relationship("BadgeUnlockHistory", back_populates="user", cascade="all, delete-orphan")
+    competition_rankings = relationship("CompetitionRanking", back_populates="user", cascade="all, delete-orphan")
 
 
 class Technology(Base):
@@ -205,6 +209,91 @@ class Settings(Base):
     smtp_port = Column(Integer, nullable=True, default=587)
     smtp_user = Column(String, nullable=True, default="")
     smtp_password = Column(String, nullable=True, default="")
+
+
+class BadgeCategory(Base):
+    __tablename__ = "badge_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    description = Column(String, nullable=True)
+
+
+class Badge(Base):
+    __tablename__ = "badges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String, nullable=False)  # Hours, Streak, Project, Frontend, Backend, Database, Roadmap, Competition, Collector
+    rarity = Column(String, nullable=False)    # Common, Rare, Epic, Legendary
+    icon = Column(String, nullable=False)      # Emoji or icon name
+    required_value = Column(Integer, nullable=False, default=0)
+    department = Column(String, nullable=True) # Frontend, Backend, Database, or None for common badges
+
+
+class UserBadge(Base):
+    __tablename__ = "user_badges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    badge_id = Column(Integer, ForeignKey("badges.id"), nullable=False)
+    earned_at = Column(DateTime, default=get_ist_time)
+
+    user = relationship("User", back_populates="badges")
+    badge = relationship("Badge")
+
+
+class BadgeProgress(Base):
+    __tablename__ = "badge_progress"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    badge_code = Column(String, nullable=False)
+    current_value = Column(Float, nullable=False, default=0.0)
+    target_value = Column(Float, nullable=False, default=0.0)
+    is_completed = Column(Boolean, default=False)
+    last_updated = Column(DateTime, default=get_ist_time)
+
+    user = relationship("User", back_populates="badge_progress")
+
+    __table_args__ = (UniqueConstraint('user_id', 'badge_code', name='_user_badge_progress_uc'),)
+
+
+class BadgeUnlockHistory(Base):
+    __tablename__ = "badge_unlock_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    badge_id = Column(Integer, ForeignKey("badges.id"), nullable=False)
+    badge_name = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    unlock_date = Column(Date, nullable=False)
+    unlock_time = Column(String, nullable=False)
+    unlock_timestamp = Column(DateTime, default=get_ist_time)
+    rarity = Column(String, nullable=False)
+    unlock_source = Column(String, nullable=False)  # auto_calculation, force_awarded
+
+    user = relationship("User", back_populates="badge_unlock_history")
+    badge = relationship("Badge")
+
+
+class CompetitionRanking(Base):
+    __tablename__ = "competition_rankings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    week_start_date = Column(Date, nullable=False)
+    week_end_date = Column(Date, nullable=False)
+    rank = Column(Integer, nullable=False)  # 1, 2, or 3
+    total_minutes = Column(Integer, nullable=False)
+    recorded_at = Column(DateTime, default=get_ist_time)
+
+    user = relationship("User", back_populates="competition_rankings")
+
+    __table_args__ = (UniqueConstraint('user_id', 'week_start_date', name='_user_week_rank_uc'),)
+
 
 
 # Messages table was removed

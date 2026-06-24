@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any
 import datetime as dt
 from datetime import datetime, date
 
@@ -207,4 +207,65 @@ class ActivityLogResponse(BaseModel):
         from_attributes = True
 
 
-# Message schemas removed
+class BadgeCategoryResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BadgeResponse(BaseModel):
+    id: int
+    code: str
+    name: str
+    description: Optional[str] = None
+    category: str
+    rarity: str
+    icon: str
+    required_value: int
+    department: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UserBadgeResponse(BaseModel):
+    badge: BadgeResponse
+    is_unlocked: bool
+    progress: float
+    target_value: float
+    earned_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BadgeUnlockHistoryResponse(BaseModel):
+    id: int
+    badge_id: int
+    badge_name: str
+    category: str
+    rarity: str
+    unlock_date: date
+    unlock_time: str
+    unlock_timestamp: datetime
+    unlock_source: str
+
+    class Config:
+        from_attributes = True
+
+
+class AdminAwardBadgeRequest(BaseModel):
+    user_id: int
+    badge_code: str
+
+
+class BadgeStatsResponse(BaseModel):
+    total_badges: int
+    total_earned: int
+    completion_rate: float
+    rarity_breakdown: Dict[str, int]
+    category_breakdown: Dict[str, int]
+    user_distribution: List[Dict[str, Any]]

@@ -54,8 +54,12 @@ def run_manual_seeding():
                 
     db = SessionLocal()
     try:
+        print("Seeding default technologies...")
+        crud.seed_default_technologies(db)
         print("Seeding default data (Admin user)...")
         crud.seed_admin_user(db)
+        print("Seeding default badges...")
+        crud.seed_default_badges(db)
         print("Database seeding completed successfully!")
     except Exception as e:
         print(f"Error during seeding: {e}")

@@ -529,6 +529,21 @@ def seed_default_technologies(db: Session):
             "topics": ["Types & Interfaces", "Generics", "Enums", "Union & Intersection Types", "TS Config & Compiler Settings"]
         },
         {
+            "name": "HTML",
+            "description": "HyperText Markup Language for structuring web pages",
+            "topics": ["Elements & Tags", "Forms & Input", "Semantic HTML", "SEO Basics"]
+        },
+        {
+            "name": "CSS",
+            "description": "Cascading Style Sheets for styling web pages",
+            "topics": ["Selectors & Specificity", "Flexbox", "Grid Layout", "Transitions & Animations", "Responsive Design"]
+        },
+        {
+            "name": "JavaScript",
+            "description": "Programming language for web development",
+            "topics": ["Variables & Data Types", "DOM Manipulation", "Functions & Scope", "Promises & Async/Await", "ES6+ Features"]
+        },
+        {
             "name": "Java",
             "description": "Object-oriented, class-based language",
             "topics": ["Syntax & Control Flow", "Classes & Interfaces", "Inheritance & Polymorphism", "Collections Framework", "Streams API & Lambdas", "Multithreading"]
@@ -611,10 +626,674 @@ def seed_admin_user(db: Session):
         
     db.commit()
 
-# Achievements logic removed
+# Gamification logic
+def seed_default_badges(db: Session):
+    # 1. Seed Categories
+    categories = [
+        ("Hours", "Awarded based on total hours logged."),
+        ("Streak", "Awarded based on consecutive daily logs."),
+        ("Project", "Awarded based on completed projects."),
+        ("Frontend", "Technology badges for frontend development."),
+        ("Backend", "Technology badges for backend development."),
+        ("Database", "Technology badges for database development."),
+        ("Roadmap", "Awarded based on overall roadmap completion percentage."),
+        ("Competition", "Awarded based on weekly leaderboard rankings."),
+        ("Collector", "Awarded based on total badges earned in your path.")
+    ]
+    for cat_name, cat_desc in categories:
+        db_cat = db.query(models.BadgeCategory).filter(models.BadgeCategory.name == cat_name).first()
+        if not db_cat:
+            db.add(models.BadgeCategory(name=cat_name, description=cat_desc))
+    db.commit()
+
+    # 2. Seed Badges
+    badges_to_seed = [
+        # --- Hours Badges ---
+        {"code": "first_step", "name": "First Step", "description": "Log 5 hours of work.", "category": "Hours", "rarity": "Common", "icon": "🥉", "required_value": 5, "department": None},
+        {"code": "getting_serious", "name": "Getting Serious", "description": "Log 15 hours of work.", "category": "Hours", "rarity": "Common", "icon": "🥉", "required_value": 15, "department": None},
+        {"code": "dedicated", "name": "Dedicated", "description": "Log 30 hours of work.", "category": "Hours", "rarity": "Rare", "icon": "🥉", "required_value": 30, "department": None},
+        {"code": "focused_builder", "name": "Focused Builder", "description": "Log 50 hours of work.", "category": "Hours", "rarity": "Rare", "icon": "🥈", "required_value": 50, "department": None},
+        {"code": "deep_worker", "name": "Deep Worker", "description": "Log 75 hours of work.", "category": "Hours", "rarity": "Epic", "icon": "🥈", "required_value": 75, "department": None},
+        {"code": "consistent_creator", "name": "Consistent Creator", "description": "Log 100 hours of work.", "category": "Hours", "rarity": "Epic", "icon": "🥈", "required_value": 100, "department": None},
+        {"code": "elite_learner", "name": "Elite Learner", "description": "Log 125 hours of work.", "category": "Hours", "rarity": "Legendary", "icon": "🥇", "required_value": 125, "department": None},
+        {"code": "power_builder", "name": "Power Builder", "description": "Log 150 hours of work.", "category": "Hours", "rarity": "Legendary", "icon": "🥇", "required_value": 150, "department": None},
+        {"code": "titan_of_progress", "name": "Titan of Progress", "description": "Log 200 hours of work.", "category": "Hours", "rarity": "Legendary", "icon": "👑", "required_value": 200, "department": None},
+
+        # --- Streak Badges ---
+        {"code": "spark", "name": "Spark", "description": "Maintain a 3-day work logging streak.", "category": "Streak", "rarity": "Common", "icon": "🔥", "required_value": 3, "department": None},
+        {"code": "momentum", "name": "Momentum", "description": "Maintain a 5-day work logging streak.", "category": "Streak", "rarity": "Common", "icon": "🔥", "required_value": 5, "department": None},
+        {"code": "consistent", "name": "Consistent", "description": "Maintain a 7-day work logging streak.", "category": "Streak", "rarity": "Rare", "icon": "🔥", "required_value": 7, "department": None},
+        {"code": "focus_mode", "name": "Focus Mode", "description": "Maintain a 10-day work logging streak.", "category": "Streak", "rarity": "Rare", "icon": "🔥", "required_value": 10, "department": None},
+        {"code": "determined", "name": "Determined", "description": "Maintain a 15-day work logging streak.", "category": "Streak", "rarity": "Epic", "icon": "🔥", "required_value": 15, "department": None},
+        {"code": "discipline_master", "name": "Discipline Master", "description": "Maintain a 25-day work logging streak.", "category": "Streak", "rarity": "Epic", "icon": "🔥", "required_value": 25, "department": None},
+        {"code": "iron_will", "name": "Iron Will", "description": "Maintain a 35-day work logging streak.", "category": "Streak", "rarity": "Legendary", "icon": "🔥", "required_value": 35, "department": None},
+        {"code": "relentless", "name": "Relentless", "description": "Maintain a 50-day work logging streak.", "category": "Streak", "rarity": "Legendary", "icon": "👑", "required_value": 50, "department": None},
+
+        # --- Project Badges ---
+        {"code": "creator", "name": "Creator", "description": "Complete 1 project.", "category": "Project", "rarity": "Common", "icon": "📦", "required_value": 1, "department": None},
+        {"code": "builder", "name": "Builder", "description": "Complete 3 projects.", "category": "Project", "rarity": "Common", "icon": "📦", "required_value": 3, "department": None},
+        {"code": "architect", "name": "Architect", "description": "Complete 5 projects.", "category": "Project", "rarity": "Rare", "icon": "📦", "required_value": 5, "department": None},
+        {"code": "innovator", "name": "Innovator", "description": "Complete 7 projects.", "category": "Project", "rarity": "Rare", "icon": "📦", "required_value": 7, "department": None},
+        {"code": "product_maker", "name": "Product Maker", "description": "Complete 10 projects.", "category": "Project", "rarity": "Epic", "icon": "📦", "required_value": 10, "department": None},
+        {"code": "solution_engineer", "name": "Solution Engineer", "description": "Complete 13 projects.", "category": "Project", "rarity": "Epic", "icon": "📦", "required_value": 13, "department": None},
+        {"code": "project_veteran", "name": "Project Veteran", "description": "Complete 15 projects.", "category": "Project", "rarity": "Legendary", "icon": "📦", "required_value": 15, "department": None},
+        {"code": "project_legend", "name": "Project Legend", "description": "Complete 20 projects.", "category": "Project", "rarity": "Legendary", "icon": "👑", "required_value": 20, "department": None},
+
+        # --- Frontend Department Badges ---
+        {"code": "markup_apprentice", "name": "Markup Apprentice", "description": "Complete at least 1 HTML topic.", "category": "Frontend", "rarity": "Common", "icon": "🌐", "required_value": 1, "department": "Frontend"},
+        {"code": "html_craftsman", "name": "HTML Craftsman", "description": "Complete all HTML topics.", "category": "Frontend", "rarity": "Rare", "icon": "🌐", "required_value": 100, "department": "Frontend"},
+        {"code": "style_apprentice", "name": "Style Apprentice", "description": "Complete at least 1 CSS topic.", "category": "Frontend", "rarity": "Common", "icon": "🎨", "required_value": 1, "department": "Frontend"},
+        {"code": "css_artist", "name": "CSS Artist", "description": "Complete all CSS topics.", "category": "Frontend", "rarity": "Rare", "icon": "🎨", "required_value": 100, "department": "Frontend"},
+        {"code": "script_runner", "name": "Script Runner", "description": "Complete at least 1 JavaScript topic.", "category": "Frontend", "rarity": "Common", "icon": "⚡", "required_value": 1, "department": "Frontend"},
+        {"code": "javascript_specialist", "name": "JavaScript Specialist", "description": "Complete all JavaScript topics.", "category": "Frontend", "rarity": "Rare", "icon": "⚡", "required_value": 100, "department": "Frontend"},
+        {"code": "component_builder", "name": "Component Builder", "description": "Complete at least 1 React topic.", "category": "Frontend", "rarity": "Common", "icon": "⚛", "required_value": 1, "department": "Frontend"},
+        {"code": "react_specialist", "name": "React Specialist", "description": "Complete all React topics.", "category": "Frontend", "rarity": "Rare", "icon": "⚛", "required_value": 100, "department": "Frontend"},
+        {"code": "type_guardian", "name": "Type Guardian", "description": "Complete at least 1 TypeScript topic.", "category": "Frontend", "rarity": "Common", "icon": "🔷", "required_value": 1, "department": "Frontend"},
+        {"code": "typescript_specialist", "name": "TypeScript Specialist", "description": "Complete all TypeScript topics.", "category": "Frontend", "rarity": "Rare", "icon": "🔷", "required_value": 100, "department": "Frontend"},
+        
+        {"code": "frontend_explorer", "name": "Frontend Explorer", "description": "Complete 2 Frontend technologies.", "category": "Frontend", "rarity": "Rare", "icon": "🥉", "required_value": 2, "department": "Frontend"},
+        {"code": "frontend_specialist", "name": "Frontend Specialist", "description": "Complete 4 Frontend technologies.", "category": "Frontend", "rarity": "Epic", "icon": "🥈", "required_value": 4, "department": "Frontend"},
+        {"code": "frontend_master", "name": "Frontend Master", "description": "Complete all 5 Frontend technologies.", "category": "Frontend", "rarity": "Legendary", "icon": "👑", "required_value": 5, "department": "Frontend"},
+
+        # --- Backend Department Badges ---
+        {"code": "python_explorer", "name": "Python Explorer", "description": "Complete at least 1 Python topic.", "category": "Backend", "rarity": "Common", "icon": "🐍", "required_value": 1, "department": "Backend"},
+        {"code": "python_specialist", "name": "Python Specialist", "description": "Complete all Python topics.", "category": "Backend", "rarity": "Rare", "icon": "🐍", "required_value": 100, "department": "Backend"},
+        {"code": "api_builder", "name": "API Builder", "description": "Complete at least 1 FastAPI topic.", "category": "Backend", "rarity": "Common", "icon": "⚙", "required_value": 1, "department": "Backend"},
+        {"code": "fastapi_specialist", "name": "FastAPI Specialist", "description": "Complete all FastAPI topics.", "category": "Backend", "rarity": "Rare", "icon": "⚙", "required_value": 100, "department": "Backend"},
+        
+        {"code": "backend_explorer", "name": "Backend Explorer", "description": "Complete 1 Backend technology.", "category": "Backend", "rarity": "Rare", "icon": "🥉", "required_value": 1, "department": "Backend"},
+        {"code": "backend_specialist", "name": "Backend Specialist", "description": "Complete all Backend technologies.", "category": "Backend", "rarity": "Epic", "icon": "🥈", "required_value": 2, "department": "Backend"},
+        {"code": "backend_master", "name": "Backend Master", "description": "Complete full backend roadmap.", "category": "Backend", "rarity": "Legendary", "icon": "👑", "required_value": 2, "department": "Backend"},
+
+        # --- Database Department Badges ---
+        {"code": "query_explorer", "name": "Query Explorer", "description": "Complete at least 1 SQL topic.", "category": "Database", "rarity": "Common", "icon": "🗄", "required_value": 1, "department": "Database"},
+        {"code": "sql_specialist", "name": "SQL Specialist", "description": "Complete all SQL topics.", "category": "Database", "rarity": "Rare", "icon": "🗄", "required_value": 100, "department": "Database"},
+        {"code": "data_builder", "name": "Data Builder", "description": "Complete at least 1 PostgreSQL topic.", "category": "Database", "rarity": "Common", "icon": "🐘", "required_value": 1, "department": "Database"},
+        {"code": "postgresql_specialist", "name": "PostgreSQL Specialist", "description": "Complete all PostgreSQL topics.", "category": "Database", "rarity": "Rare", "icon": "🐘", "required_value": 100, "department": "Database"},
+        
+        {"code": "database_explorer", "name": "Database Explorer", "description": "Complete 1 Database technology.", "category": "Database", "rarity": "Rare", "icon": "🥉", "required_value": 1, "department": "Database"},
+        {"code": "database_specialist", "name": "Database Specialist", "description": "Complete all Database technologies.", "category": "Database", "rarity": "Epic", "icon": "🥈", "required_value": 2, "department": "Database"},
+        {"code": "database_master", "name": "Database Master", "description": "Complete full database roadmap.", "category": "Database", "rarity": "Legendary", "icon": "👑", "required_value": 2, "department": "Database"},
+
+        # --- Learning Roadmap Badges ---
+        {"code": "pathfinder", "name": "Pathfinder", "description": "Complete 25% of your assigned roadmap.", "category": "Roadmap", "rarity": "Common", "icon": "🧭", "required_value": 25, "department": None},
+        {"code": "trailblazer", "name": "Trailblazer", "description": "Complete 50% of your assigned roadmap.", "category": "Roadmap", "rarity": "Rare", "icon": "🏹", "required_value": 50, "department": None},
+        {"code": "momentum_maker", "name": "Momentum Maker", "description": "Complete 75% of your assigned roadmap.", "category": "Roadmap", "rarity": "Epic", "icon": "🚀", "required_value": 75, "department": None},
+        {"code": "roadmap_conqueror", "name": "Roadmap Conqueror", "description": "Complete 100% of your assigned roadmap.", "category": "Roadmap", "rarity": "Legendary", "icon": "👑", "required_value": 100, "department": None},
+
+        # --- Competition Badges ---
+        {"code": "weekly_champion_1", "name": "Weekly Champion I", "description": "Finish 1st place on the weekly leaderboard 1 time.", "category": "Competition", "rarity": "Common", "icon": "🥇", "required_value": 1, "department": None},
+        {"code": "weekly_champion_2", "name": "Weekly Champion II", "description": "Finish 1st place on the weekly leaderboard 3 times.", "category": "Competition", "rarity": "Rare", "icon": "🥇", "required_value": 3, "department": None},
+        {"code": "weekly_champion_3", "name": "Weekly Champion III", "description": "Finish 1st place on the weekly leaderboard 5 times.", "category": "Competition", "rarity": "Rare", "icon": "🥇", "required_value": 5, "department": None},
+        {"code": "weekly_champion_4", "name": "Weekly Champion IV", "description": "Finish 1st place on the weekly leaderboard 10 times.", "category": "Competition", "rarity": "Epic", "icon": "🥇", "required_value": 10, "department": None},
+        {"code": "weekly_champion_5", "name": "Weekly Champion V", "description": "Finish 1st place on the weekly leaderboard 15 times.", "category": "Competition", "rarity": "Legendary", "icon": "👑", "required_value": 15, "department": None},
+        
+        {"code": "rising_challenger_1", "name": "Rising Challenger I", "description": "Finish 2nd place on the weekly leaderboard 1 time.", "category": "Competition", "rarity": "Common", "icon": "🥈", "required_value": 1, "department": None},
+        {"code": "rising_challenger_2", "name": "Rising Challenger II", "description": "Finish 2nd place on the weekly leaderboard 3 times.", "category": "Competition", "rarity": "Rare", "icon": "🥈", "required_value": 3, "department": None},
+        {"code": "rising_challenger_3", "name": "Rising Challenger III", "description": "Finish 2nd place on the weekly leaderboard 5 times.", "category": "Competition", "rarity": "Rare", "icon": "🥈", "required_value": 5, "department": None},
+        {"code": "rising_challenger_4", "name": "Rising Challenger IV", "description": "Finish 2nd place on the weekly leaderboard 10 times.", "category": "Competition", "rarity": "Epic", "icon": "🥈", "required_value": 10, "department": None},
+        {"code": "rising_challenger_5", "name": "Rising Challenger V", "description": "Finish 2nd place on the weekly leaderboard 15 times.", "category": "Competition", "rarity": "Legendary", "icon": "👑", "required_value": 15, "department": None},
+        
+        {"code": "podium_finisher_1", "name": "Podium Finisher I", "description": "Finish 3rd place on the weekly leaderboard 1 time.", "category": "Competition", "rarity": "Common", "icon": "🥉", "required_value": 1, "department": None},
+        {"code": "podium_finisher_2", "name": "Podium Finisher II", "description": "Finish 3rd place on the weekly leaderboard 3 times.", "category": "Competition", "rarity": "Rare", "icon": "🥉", "required_value": 3, "department": None},
+        {"code": "podium_finisher_3", "name": "Podium Finisher III", "description": "Finish 3rd place on the weekly leaderboard 5 times.", "category": "Competition", "rarity": "Rare", "icon": "🥉", "required_value": 5, "department": None},
+        {"code": "podium_finisher_4", "name": "Podium Finisher IV", "description": "Finish 3rd place on the weekly leaderboard 10 times.", "category": "Competition", "rarity": "Epic", "icon": "🥉", "required_value": 10, "department": None},
+        {"code": "podium_finisher_5", "name": "Podium Finisher V", "description": "Finish 3rd place on the weekly leaderboard 15 times.", "category": "Competition", "rarity": "Legendary", "icon": "👑", "required_value": 15, "department": None},
+
+        # --- Collector Badges ---
+        {"code": "badge_hunter", "name": "Badge Hunter", "description": "Earn 10 badges.", "category": "Collector", "rarity": "Common", "icon": "🏅", "required_value": 10, "department": None},
+        {"code": "collector", "name": "Collector", "description": "Earn 20 badges.", "category": "Collector", "rarity": "Common", "icon": "🏅", "required_value": 20, "department": None},
+        {"code": "treasure_seeker", "name": "Treasure Seeker", "description": "Earn 30 badges.", "category": "Collector", "rarity": "Rare", "icon": "🏅", "required_value": 30, "department": None},
+        {"code": "badge_hoarder", "name": "Badge Hoarder", "description": "Earn 40 badges.", "category": "Collector", "rarity": "Epic", "icon": "🏅", "required_value": 40, "department": None},
+        {"code": "elite_collector", "name": "Elite Collector", "description": "Earn 50 badges.", "category": "Collector", "rarity": "Legendary", "icon": "🥇", "required_value": 50, "department": None},
+        {"code": "hall_of_fame", "name": "Hall of Fame", "description": "Earn 60 badges.", "category": "Collector", "rarity": "Legendary", "icon": "👑", "required_value": 60, "department": None},
+
+        # --- Ultimate Collector Badge ---
+        {"code": "ultimate_collector", "name": "Ultimate Collector", "description": "Earn every available badge for your assigned department path.", "category": "Collector", "rarity": "Legendary", "icon": "💎", "required_value": 1, "department": None}
+    ]
+    for b_data in badges_to_seed:
+        db_badge = db.query(models.Badge).filter(models.Badge.code == b_data["code"]).first()
+        if not db_badge:
+            db.add(models.Badge(
+                code=b_data["code"],
+                name=b_data["name"],
+                description=b_data["description"],
+                category=b_data["category"],
+                rarity=b_data["rarity"],
+                icon=b_data["icon"],
+                required_value=b_data["required_value"],
+                department=b_data["department"]
+            ))
+    db.commit()
+
+
+def check_and_update_badges(db: Session, user_id: int):
+    user = get_user(db, user_id)
+    if not user:
+        return
+        
+    # 1. Determine user's departments
+    user_depts = []
+    if user.primary_team:
+        p_lower = user.primary_team.lower()
+        if "front" in p_lower:
+            user_depts.append("Frontend")
+        elif "back" in p_lower:
+            user_depts.append("Backend")
+        elif "data" in p_lower or "db" in p_lower or "sql" in p_lower or "postgres" in p_lower:
+            user_depts.append("Database")
+    if user.secondary_team:
+        s_lower = user.secondary_team.lower()
+        if "front" in s_lower:
+            user_depts.append("Frontend")
+        elif "back" in s_lower:
+            user_depts.append("Backend")
+        elif "data" in s_lower or "db" in s_lower or "sql" in s_lower or "postgres" in s_lower:
+            user_depts.append("Database")
+
+    # 2. Get total hours
+    total_mins = db.query(func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)).filter(models.DailyLog.user_id == user_id).scalar() or 0
+    total_hours = total_mins / 60.0
+
+    # 3. Get streak
+    longest_streak = 0
+    if user.streak:
+        longest_streak = user.streak.longest_streak
+
+    # 4. Get completed projects
+    completed_projects = db.query(models.Project).filter(
+        models.Project.user_id == user_id,
+        models.Project.status == "Completed"
+    ).count()
+
+    # 5. Technology completions helper
+    techs = db.query(models.Technology).all()
+    tech_map = {t.name: t for t in techs}
+
+    def get_tech_metrics(tech_name):
+        tech = tech_map.get(tech_name)
+        if not tech:
+            return 0, 0, False
+        topics = tech.topics
+        if not topics:
+            return 0, 0, False
+        topic_ids = [tp.id for tp in topics]
+        completed_count = db.query(models.CompletedTopic).filter(
+            models.CompletedTopic.user_id == user_id,
+            models.CompletedTopic.topic_id.in_(topic_ids)
+        ).count()
+        is_completed = completed_count == len(topics)
+        return completed_count, len(topics), is_completed
+
+    html_count, html_total, html_completed = get_tech_metrics("HTML")
+    css_count, css_total, css_completed = get_tech_metrics("CSS")
+    js_count, js_total, js_completed = get_tech_metrics("JavaScript")
+    react_count, react_total, react_completed = get_tech_metrics("React")
+    ts_count, ts_total, ts_completed = get_tech_metrics("TypeScript")
+    python_count, python_total, python_completed = get_tech_metrics("Python")
+    fastapi_count, fastapi_total, fastapi_completed = get_tech_metrics("FastAPI")
+    sql_count, sql_total, sql_completed = get_tech_metrics("SQL")
+    postgres_count, postgres_total, postgres_completed = get_tech_metrics("PostgreSQL")
+
+    frontend_techs_completed = sum([html_completed, css_completed, js_completed, react_completed, ts_completed])
+    backend_techs_completed = sum([python_completed, fastapi_completed])
+    database_techs_completed = sum([sql_completed, postgres_completed])
+
+    # 6. Roadmap percentage progress
+    total_assigned_topics = 0
+    for ut in user.assigned_technologies:
+        total_assigned_topics += len(ut.technology.topics)
+    
+    completed_assigned_topics = 0
+    if user.assigned_technologies:
+        assigned_tech_ids = [ut.technology_id for ut in user.assigned_technologies]
+        completed_assigned_topics = db.query(models.CompletedTopic).join(models.Topic).filter(
+            models.CompletedTopic.user_id == user_id,
+            models.Topic.technology_id.in_(assigned_tech_ids)
+        ).count()
+        
+    roadmap_percentage = (completed_assigned_topics / total_assigned_topics * 100.0) if total_assigned_topics > 0 else 0.0
+
+    # 7. Competition Rankings count
+    first_places = db.query(models.CompetitionRanking).filter(models.CompetitionRanking.user_id == user_id, models.CompetitionRanking.rank == 1).count()
+    second_places = db.query(models.CompetitionRanking).filter(models.CompetitionRanking.user_id == user_id, models.CompetitionRanking.rank == 2).count()
+    third_places = db.query(models.CompetitionRanking).filter(models.CompetitionRanking.user_id == user_id, models.CompetitionRanking.rank == 3).count()
+
+    # 8. Metric mappings
+    metric_values = {
+        # Hours
+        "first_step": total_hours,
+        "getting_serious": total_hours,
+        "dedicated": total_hours,
+        "focused_builder": total_hours,
+        "deep_worker": total_hours,
+        "consistent_creator": total_hours,
+        "elite_learner": total_hours,
+        "power_builder": total_hours,
+        "titan_of_progress": total_hours,
+
+        # Streak
+        "spark": longest_streak,
+        "momentum": longest_streak,
+        "consistent": longest_streak,
+        "focus_mode": longest_streak,
+        "determined": longest_streak,
+        "discipline_master": longest_streak,
+        "iron_will": longest_streak,
+        "relentless": longest_streak,
+
+        # Project
+        "creator": completed_projects,
+        "builder": completed_projects,
+        "architect": completed_projects,
+        "innovator": completed_projects,
+        "product_maker": completed_projects,
+        "solution_engineer": completed_projects,
+        "project_veteran": completed_projects,
+        "project_legend": completed_projects,
+
+        # Frontend
+        "markup_apprentice": html_count,
+        "html_craftsman": 1 if html_completed else 0,
+        "style_apprentice": css_count,
+        "css_artist": 1 if css_completed else 0,
+        "script_runner": js_count,
+        "javascript_specialist": 1 if js_completed else 0,
+        "component_builder": react_count,
+        "react_specialist": 1 if react_completed else 0,
+        "type_guardian": ts_count,
+        "typescript_specialist": 1 if ts_completed else 0,
+        "frontend_explorer": frontend_techs_completed,
+        "frontend_specialist": frontend_techs_completed,
+        "frontend_master": frontend_techs_completed,
+
+        # Backend
+        "python_explorer": python_count,
+        "python_specialist": 1 if python_completed else 0,
+        "api_builder": fastapi_count,
+        "fastapi_specialist": 1 if fastapi_completed else 0,
+        "backend_explorer": backend_techs_completed,
+        "backend_specialist": backend_techs_completed,
+        "backend_master": backend_techs_completed,
+
+        # Database
+        "query_explorer": sql_count,
+        "sql_specialist": 1 if sql_completed else 0,
+        "data_builder": postgres_count,
+        "postgresql_specialist": 1 if postgres_completed else 0,
+        "database_explorer": database_techs_completed,
+        "database_specialist": database_techs_completed,
+        "database_master": database_techs_completed,
+
+        # Roadmap
+        "pathfinder": roadmap_percentage,
+        "trailblazer": roadmap_percentage,
+        "momentum_maker": roadmap_percentage,
+        "roadmap_conqueror": roadmap_percentage,
+
+        # Competition
+        "weekly_champion_1": first_places,
+        "weekly_champion_2": first_places,
+        "weekly_champion_3": first_places,
+        "weekly_champion_4": first_places,
+        "weekly_champion_5": first_places,
+        "rising_challenger_1": second_places,
+        "rising_challenger_2": second_places,
+        "rising_challenger_3": second_places,
+        "rising_challenger_4": second_places,
+        "rising_challenger_5": second_places,
+        "podium_finisher_1": third_places,
+        "podium_finisher_2": third_places,
+        "podium_finisher_3": third_places,
+        "podium_finisher_4": third_places,
+        "podium_finisher_5": third_places
+    }
+
+    # 9. Evaluate standard badges
+    badges = db.query(models.Badge).all()
+    for badge in badges:
+        if badge.code in ["badge_hunter", "collector", "treasure_seeker", "badge_hoarder", "elite_collector", "hall_of_fame", "ultimate_collector"]:
+            continue
+            
+        target = float(badge.required_value)
+        current = float(metric_values.get(badge.code, 0.0))
+        
+        # Limit technology specialist target values to 1
+        if badge.code in ["html_craftsman", "css_artist", "javascript_specialist", "react_specialist", "typescript_specialist",
+                          "python_specialist", "fastapi_specialist", "sql_specialist", "postgresql_specialist"]:
+            target = 1.0
+            
+        is_completed = current >= target
+        
+        progress_rec = db.query(models.BadgeProgress).filter(
+            models.BadgeProgress.user_id == user_id,
+            models.BadgeProgress.badge_code == badge.code
+        ).first()
+        
+        if not progress_rec:
+            progress_rec = models.BadgeProgress(
+                user_id=user_id,
+                badge_code=badge.code,
+                current_value=current,
+                target_value=target,
+                is_completed=is_completed
+            )
+            db.add(progress_rec)
+        else:
+            progress_rec.current_value = current
+            progress_rec.target_value = target
+            if not progress_rec.is_completed and is_completed:
+                progress_rec.is_completed = True
+                
+        if is_completed:
+            existing_badge = db.query(models.UserBadge).filter(
+                models.UserBadge.user_id == user_id,
+                models.UserBadge.badge_id == badge.id
+            ).first()
+            if not existing_badge:
+                new_earn = models.UserBadge(user_id=user_id, badge_id=badge.id)
+                db.add(new_earn)
+                
+                now_ist = get_ist_time()
+                history_rec = models.BadgeUnlockHistory(
+                    user_id=user_id,
+                    badge_id=badge.id,
+                    badge_name=badge.name,
+                    category=badge.category,
+                    unlock_date=now_ist.date(),
+                    unlock_time=now_ist.strftime("%I:%M %p"),
+                    unlock_timestamp=now_ist,
+                    rarity=badge.rarity,
+                    unlock_source="auto_calculation"
+                )
+                db.add(history_rec)
+                
+                act_log = models.ActivityLog(
+                    user_id=user_id,
+                    user_name=user.full_name,
+                    activity_type="badge_unlocked",
+                    detail=f"🏆 {user.full_name} unlocked {badge.name} ({badge.rarity})"
+                )
+                db.add(act_log)
+    db.commit()
+
+    # 10. Evaluate Collector badges
+    other_badges_earned = db.query(models.UserBadge).join(models.Badge).filter(
+        models.UserBadge.user_id == user_id,
+        models.Badge.category != "Collector"
+    ).count()
+
+    collector_badges_info = [
+        ("badge_hunter", 10),
+        ("collector", 20),
+        ("treasure_seeker", 30),
+        ("badge_hoarder", 40),
+        ("elite_collector", 50),
+        ("hall_of_fame", 60)
+    ]
+
+    for code, target in collector_badges_info:
+        badge = db.query(models.Badge).filter(models.Badge.code == code).first()
+        if not badge:
+            continue
+            
+        is_completed = other_badges_earned >= target
+        
+        progress_rec = db.query(models.BadgeProgress).filter(
+            models.BadgeProgress.user_id == user_id,
+            models.BadgeProgress.badge_code == code
+        ).first()
+        
+        if not progress_rec:
+            progress_rec = models.BadgeProgress(
+                user_id=user_id,
+                badge_code=code,
+                current_value=float(other_badges_earned),
+                target_value=float(target),
+                is_completed=is_completed
+            )
+            db.add(progress_rec)
+        else:
+            progress_rec.current_value = float(other_badges_earned)
+            progress_rec.target_value = float(target)
+            if not progress_rec.is_completed and is_completed:
+                progress_rec.is_completed = True
+                
+        if is_completed:
+            existing_badge = db.query(models.UserBadge).filter(
+                models.UserBadge.user_id == user_id,
+                models.UserBadge.badge_id == badge.id
+            ).first()
+            if not existing_badge:
+                new_earn = models.UserBadge(user_id=user_id, badge_id=badge.id)
+                db.add(new_earn)
+                
+                now_ist = get_ist_time()
+                history_rec = models.BadgeUnlockHistory(
+                    user_id=user_id,
+                    badge_id=badge.id,
+                    badge_name=badge.name,
+                    category=badge.category,
+                    unlock_date=now_ist.date(),
+                    unlock_time=now_ist.strftime("%I:%M %p"),
+                    unlock_timestamp=now_ist,
+                    rarity=badge.rarity,
+                    unlock_source="auto_calculation"
+                )
+                db.add(history_rec)
+                
+                act_log = models.ActivityLog(
+                    user_id=user_id,
+                    user_name=user.full_name,
+                    activity_type="badge_unlocked",
+                    detail=f"🏆 {user.full_name} unlocked {badge.name} ({badge.rarity})"
+                )
+                db.add(act_log)
+    db.commit()
+
+    # 11. Evaluate Ultimate Collector badge
+    ultimate_badge = db.query(models.Badge).filter(models.Badge.code == "ultimate_collector").first()
+    if ultimate_badge:
+        # Get all badges available in user's path (excluding ultimate_collector)
+        available_badges_q = db.query(models.Badge).filter(
+            (models.Badge.department == None) | (models.Badge.department.in_(user_depts))
+        ).filter(models.Badge.code != "ultimate_collector").all()
+        
+        available_badge_ids = [b.id for b in available_badges_q]
+        
+        earned_available_count = db.query(models.UserBadge).filter(
+            models.UserBadge.user_id == user_id,
+            models.UserBadge.badge_id.in_(available_badge_ids)
+        ).count() if available_badge_ids else 0
+        
+        target = len(available_badge_ids)
+        is_completed = earned_available_count >= target and target > 0
+        
+        progress_rec = db.query(models.BadgeProgress).filter(
+            models.BadgeProgress.user_id == user_id,
+            models.BadgeProgress.badge_code == "ultimate_collector"
+        ).first()
+        
+        if not progress_rec:
+            progress_rec = models.BadgeProgress(
+                user_id=user_id,
+                badge_code="ultimate_collector",
+                current_value=float(earned_available_count),
+                target_value=float(target),
+                is_completed=is_completed
+            )
+            db.add(progress_rec)
+        else:
+            progress_rec.current_value = float(earned_available_count)
+            progress_rec.target_value = float(target)
+            if not progress_rec.is_completed and is_completed:
+                progress_rec.is_completed = True
+                
+        if is_completed:
+            existing_badge = db.query(models.UserBadge).filter(
+                models.UserBadge.user_id == user_id,
+                models.UserBadge.badge_id == ultimate_badge.id
+            ).first()
+            if not existing_badge:
+                new_earn = models.UserBadge(user_id=user_id, badge_id=ultimate_badge.id)
+                db.add(new_earn)
+                
+                now_ist = get_ist_time()
+                history_rec = models.BadgeUnlockHistory(
+                    user_id=user_id,
+                    badge_id=ultimate_badge.id,
+                    badge_name=ultimate_badge.name,
+                    category=ultimate_badge.category,
+                    unlock_date=now_ist.date(),
+                    unlock_time=now_ist.strftime("%I:%M %p"),
+                    unlock_timestamp=now_ist,
+                    rarity=ultimate_badge.rarity,
+                    unlock_source="auto_calculation"
+                )
+                db.add(history_rec)
+                
+                act_log = models.ActivityLog(
+                    user_id=user_id,
+                    user_name=user.full_name,
+                    activity_type="badge_unlocked",
+                    detail=f"🏆 {user.full_name} unlocked {ultimate_badge.name} ({ultimate_badge.rarity})"
+                )
+                db.add(act_log)
+        db.commit()
+
+
+def recalculate_all_badges(db: Session):
+    # 1. Clear competition rankings
+    db.query(models.CompetitionRanking).delete()
+    db.commit()
+
+    # 2. Get first daily log date to calculate week ranges
+    first_log = db.query(models.DailyLog).order_by(models.DailyLog.date.asc()).first()
+    today_date = get_ist_date()
+    
+    if first_log:
+        start_date = first_log.date
+    else:
+        start_date = today_date - timedelta(weeks=12)
+        
+    # Adjust start_date to Sunday of that week
+    start_sunday = start_date - timedelta(days=(start_date.weekday() + 1) % 7)
+    
+    # 3. Calculate weekly legends for all past completed weeks
+    current_sunday = start_sunday
+    active_users = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).all()
+    user_ids = [u.id for u in active_users]
+    
+    while current_sunday < today_date:
+        week_start = current_sunday
+        week_end = current_sunday + timedelta(days=6)
+        
+        # If the week is completely in the past
+        if week_end < today_date and user_ids:
+            weekly_hours_q = db.query(
+                models.DailyLog.user_id,
+                func.sum(models.DailyLog.hours * 60 + models.DailyLog.minutes)
+            ).filter(
+                models.DailyLog.user_id.in_(user_ids),
+                models.DailyLog.date >= week_start,
+                models.DailyLog.date <= week_end
+            ).group_by(models.DailyLog.user_id).all()
+            
+            weekly_contributors = []
+            for uid, total_mins in weekly_hours_q:
+                if total_mins and total_mins > 0:
+                    weekly_contributors.append({
+                        "user_id": uid,
+                        "total_minutes": total_mins
+                    })
+                    
+            weekly_contributors.sort(key=lambda x: x["total_minutes"], reverse=True)
+            
+            # Save top 3
+            for rank_idx, contrib in enumerate(weekly_contributors[:3]):
+                db_rank = models.CompetitionRanking(
+                    user_id=contrib["user_id"],
+                    week_start_date=week_start,
+                    week_end_date=week_end,
+                    rank=rank_idx + 1,
+                    total_minutes=contrib["total_minutes"]
+                )
+                db.add(db_rank)
+            db.commit()
+            
+        current_sunday += timedelta(days=7)
+
+    # 4. Trigger badges check for all users
+    all_users = db.query(models.User).all()
+    for user in all_users:
+        check_and_update_badges(db, user.id)
+
+
+def force_award_badge(db: Session, user_id: int, badge_code: str):
+    user = get_user(db, user_id)
+    if not user:
+        return None
+    badge = db.query(models.Badge).filter(models.Badge.code == badge_code).first()
+    if not badge:
+        return None
+        
+    existing_badge = db.query(models.UserBadge).filter(
+        models.UserBadge.user_id == user_id,
+        models.UserBadge.badge_id == badge.id
+    ).first()
+    
+    if not existing_badge:
+        new_earn = models.UserBadge(user_id=user_id, badge_id=badge.id)
+        db.add(new_earn)
+        
+        now_ist = get_ist_time()
+        history_rec = models.BadgeUnlockHistory(
+            user_id=user_id,
+            badge_id=badge.id,
+            badge_name=badge.name,
+            category=badge.category,
+            unlock_date=now_ist.date(),
+            unlock_time=now_ist.strftime("%I:%M %p"),
+            unlock_timestamp=now_ist,
+            rarity=badge.rarity,
+            unlock_source="force_awarded"
+        )
+        db.add(history_rec)
+        
+        progress_rec = db.query(models.BadgeProgress).filter(
+            models.BadgeProgress.user_id == user_id,
+            models.BadgeProgress.badge_code == badge_code
+        ).first()
+        if not progress_rec:
+            progress_rec = models.BadgeProgress(
+                user_id=user_id,
+                badge_code=badge_code,
+                current_value=float(badge.required_value),
+                target_value=float(badge.required_value),
+                is_completed=True
+            )
+            db.add(progress_rec)
+        else:
+            progress_rec.current_value = float(badge.required_value)
+            progress_rec.is_completed = True
+            
+        act_log = models.ActivityLog(
+            user_id=user_id,
+            user_name=user.full_name,
+            activity_type="badge_unlocked",
+            detail=f"🏆 {user.full_name} unlocked {badge.name} ({badge.rarity})"
+        )
+        db.add(act_log)
+        db.commit()
+        return badge
+    return None
+
+
 def run_db_seeding(db: Session):
     seed_default_technologies(db)
     seed_admin_user(db)
+    seed_default_badges(db)
+
 
 
 # ==========================================

@@ -36,10 +36,12 @@ import {
   TrendingUp,
   ShieldCheck,
   CalendarDays,
-  Sliders
+  Sliders,
+  Search,
+  Sparkles
 } from 'lucide-react';
 import { api } from './services/api';
-import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, EmailLog } from './services/api';
+import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, EmailLog, Badge, UserBadge, BadgeUnlockHistory, BadgeStats } from './services/api';
 import { SUGGESTED_PROJECTS } from './data/suggestedProjects';
 
 // ============================================================================
@@ -52,6 +54,9 @@ interface AuthContextType {
   login: (u: string, p: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  checkNewBadges: () => Promise<void>;
+  activeCelebrationBadge: Badge | null;
+  setActiveCelebrationBadge: (b: Badge | null) => void;
 }
 
 const AuthContext = React.createContext<AuthContextType | null>(null);
@@ -65,6 +70,9 @@ function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [earnedBadgeCodes, setEarnedBadgeCodes] = useState<string[]>([]);
+  const [isInitialBadgeLoad, setIsInitialBadgeLoad] = useState<boolean>(true);
+  const [activeCelebrationBadge, setActiveCelebrationBadge] = useState<Badge | null>(null);
 
   const refreshUser = async () => {
     try {
@@ -76,6 +84,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const checkNewBadges = async () => {
+    if (!localStorage.getItem('access_token')) return;
+    try {
+      const myBadges = await api.getMyBadges();
+      const currentEarned = myBadges.filter(b => b.is_unlocked).map(b => b.badge.code);
+      
+      if (!isInitialBadgeLoad && earnedBadgeCodes.length > 0) {
+        const newlyUnlocked = myBadges.filter(b => b.is_unlocked && !earnedBadgeCodes.includes(b.badge.code));
+        if (newlyUnlocked.length > 0) {
+          newlyUnlocked.forEach((ub, idx) => {
+            setTimeout(() => {
+              setActiveCelebrationBadge(ub.badge);
+            }, idx * 4500);
+          });
+        }
+      }
+      
+      setEarnedBadgeCodes(currentEarned);
+      setIsInitialBadgeLoad(false);
+    } catch (err) {
+      console.error("Error checking badges:", err);
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (token) {
@@ -84,6 +116,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      setIsInitialBadgeLoad(true);
+      // Fetch initial badges list
+      api.getMyBadges().then(myBadges => {
+        const currentEarned = myBadges.filter(b => b.is_unlocked).map(b => b.badge.code);
+        setEarnedBadgeCodes(currentEarned);
+        setIsInitialBadgeLoad(false);
+      }).catch(err => console.error(err));
+    } else {
+      setEarnedBadgeCodes([]);
+      setIsInitialBadgeLoad(true);
+      setActiveCelebrationBadge(null);
+    }
+  }, [user]);
 
   const login = async (u: string, p: string) => {
     setLoading(true);
@@ -101,7 +149,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
-  const value = { user, loading, login, logout, refreshUser };
+  const value = { 
+    user, 
+    loading, 
+    login, 
+    logout, 
+    refreshUser,
+    checkNewBadges,
+    activeCelebrationBadge,
+    setActiveCelebrationBadge
+  };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -204,6 +261,10 @@ function Sidebar() {
               <SettingsIcon size={18} />
               <span>Settings</span>
             </Link>
+            <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`}>
+              <ShieldCheck size={18} />
+              <span>Badge Collection</span>
+            </Link>
             <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
               <Award size={18} />
               <span>Spotlight Gallery</span>
@@ -230,6 +291,10 @@ function Sidebar() {
             <Link to="/leaderboard" className={`sidebar-link ${location.pathname === '/leaderboard' ? 'active' : ''}`}>
               <Trophy size={18} />
               <span>Leaderboard</span>
+            </Link>
+            <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`}>
+              <ShieldCheck size={18} />
+              <span>Badge Collection</span>
             </Link>
             <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
               <Award size={18} />
@@ -260,13 +325,206 @@ function Sidebar() {
   );
 }
 
+function BadgeCelebrationModal({ badge, onClose }: { badge: any, onClose: () => void }) {
+  const getRarityColor = (rarity: string) => {
+    switch (rarity) {
+      case 'Common': return '#9ca3af';
+      case 'Rare': return '#3b82f6';
+      case 'Epic': return '#a855f7';
+      case 'Legendary': return '#eab308';
+      default: return 'var(--color-primary)';
+    }
+  };
+
+  const rarityColor = getRarityColor(badge.rarity);
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(5, 5, 10, 0.95)',
+      backdropFilter: 'blur(12px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 99999,
+      animation: 'fadeIn 0.4s ease-out'
+    }}>
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes scaleUp {
+          from { transform: scale(0.7) translateY(30px); opacity: 0; }
+          to { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        @keyframes float {
+          0% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-10px) rotate(3deg); }
+          100% { transform: translateY(0px) rotate(0deg); }
+        }
+        .celebration-card {
+          animation: scaleUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        .celebration-icon {
+          animation: float 3s ease-in-out infinite;
+        }
+      `}</style>
+      
+      <div 
+        className="celebration-card" 
+        style={{
+          width: '90%',
+          maxWidth: '440px',
+          backgroundColor: 'rgba(22, 22, 34, 0.95)',
+          border: `2px solid ${rarityColor}`,
+          borderRadius: '24px',
+          padding: '3rem 2rem 2.5rem 2rem',
+          textAlign: 'center',
+          boxShadow: `0 0 50px ${rarityColor}33`,
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '1.5rem',
+          overflow: 'hidden'
+        }}
+      >
+        <div style={{
+          position: 'absolute',
+          top: '-150px',
+          width: '300px',
+          height: '300px',
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${rarityColor}22 0%, transparent 70%)`,
+          filter: 'blur(30px)',
+          zIndex: 0
+        }}></div>
+
+        <div 
+          className="celebration-icon"
+          style={{
+            width: '100px',
+            height: '100px',
+            borderRadius: '28px',
+            backgroundColor: 'rgba(255, 255, 255, 0.02)',
+            border: `1px solid ${rarityColor}44`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '4rem',
+            boxShadow: `0 10px 25px ${rarityColor}22`,
+            zIndex: 1,
+            position: 'relative'
+          }}
+        >
+          {badge.icon}
+        </div>
+
+        <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <span style={{ 
+            fontSize: '0.85rem', 
+            fontWeight: 800, 
+            letterSpacing: '3px', 
+            color: rarityColor, 
+            textTransform: 'uppercase' 
+          }}>
+            🏆 New Badge Unlocked!
+          </span>
+          <h2 style={{ 
+            fontSize: '1.85rem', 
+            fontWeight: 800, 
+            color: 'var(--text-primary)', 
+            margin: '0.25rem 0',
+            lineHeight: 1.2
+          }}>
+            {badge.name}
+          </h2>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <span style={{
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              backgroundColor: `${rarityColor}1a`,
+              color: rarityColor,
+              border: `1px solid ${rarityColor}44`,
+              padding: '0.2rem 0.75rem',
+              borderRadius: '20px',
+              textTransform: 'uppercase',
+              letterSpacing: '1px'
+            }}>
+              {badge.rarity}
+            </span>
+          </div>
+          <p style={{ 
+            fontSize: '0.9rem', 
+            color: 'var(--text-secondary)', 
+            marginTop: '0.75rem',
+            lineHeight: 1.5,
+            padding: '0 1rem'
+          }}>
+            {badge.description}
+          </p>
+        </div>
+
+        <div style={{ 
+          fontSize: '0.75rem', 
+          color: 'var(--text-muted)', 
+          borderTop: '1px solid rgba(255,255,255,0.05)', 
+          width: '100%', 
+          paddingTop: '1rem',
+          marginTop: '0.25rem',
+          zIndex: 1
+        }}>
+          * Badge Added To Collection
+        </div>
+
+        <button 
+          className="btn btn-primary" 
+          onClick={onClose}
+          style={{
+            width: '100%',
+            padding: '0.75rem',
+            borderRadius: '12px',
+            fontSize: '0.95rem',
+            fontWeight: 700,
+            backgroundColor: rarityColor,
+            color: '#000',
+            border: 'none',
+            boxShadow: `0 4px 15px ${rarityColor}44`,
+            cursor: 'pointer',
+            zIndex: 1,
+            transition: 'transform 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          Awesome!
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Layout({ children }: { children: React.ReactNode }) {
+  const { activeCelebrationBadge, setActiveCelebrationBadge } = useAuth();
+
   return (
     <div className="app-container">
       <Sidebar />
       <main className="main-content">
         {children}
       </main>
+      
+      {activeCelebrationBadge && (
+        <BadgeCelebrationModal 
+          badge={activeCelebrationBadge} 
+          onClose={() => setActiveCelebrationBadge(null)} 
+        />
+      )}
     </div>
   );
 }
@@ -1128,7 +1386,7 @@ export function WorkLogs() {
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const { user } = useAuth();
+  const { user, checkNewBadges } = useAuth();
   const { showSuccess, showError, ToastComponent } = useToast();
 
   // Form states
@@ -1239,6 +1497,7 @@ export function WorkLogs() {
       setDescription('');
       setWeekOffset(0);
       fetchLogs(0);
+      checkNewBadges();
     } catch (err: any) {
       showError(err.message || 'Failed to log work');
     } finally {
@@ -1440,6 +1699,7 @@ export function Roadmap() {
   const [roadmaps, setRoadmaps] = useState<RoadmapTech[]>([]);
   const [loading, setLoading] = useState(true);
   const { showSuccess, showError, ToastComponent } = useToast();
+  const { checkNewBadges } = useAuth();
 
   const fetchRoadmap = async () => {
     try {
@@ -1466,6 +1726,7 @@ export function Roadmap() {
         showSuccess('Topic completed! Great job.');
       }
       fetchRoadmap();
+      checkNewBadges();
     } catch (err: any) {
       showError(err.message || 'Failed to update topic');
     }
@@ -1594,7 +1855,7 @@ export function Projects() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const { user } = useAuth();
+  const { user, checkNewBadges } = useAuth();
   const { showSuccess, showError, ToastComponent } = useToast();
 
   // Create Project Form
@@ -1705,6 +1966,7 @@ export function Projects() {
       setShowModal(false);
       
       fetchProjects();
+      checkNewBadges();
     } catch (err: any) {
       showError(err.message || 'Failed to create project');
     } finally {
@@ -2018,7 +2280,7 @@ export function ProjectDetails() {
   const [loading, setLoading] = useState(true);
   const [showLogModal, setShowLogModal] = useState(false);
   const [submittingLog, setSubmittingLog] = useState(false);
-  const { user } = useAuth();
+  const { user, checkNewBadges } = useAuth();
   const navigate = useNavigate();
   const { project_id } = useNavigateParameters();
   const { showSuccess, showError, ToastComponent } = useToast();
@@ -2084,6 +2346,7 @@ export function ProjectDetails() {
       setDescription('');
       setShowLogModal(false);
       fetchProjectDetail();
+      checkNewBadges();
     } catch (err: any) {
       showError(err.message || 'Failed to log hours');
     } finally {
@@ -2467,6 +2730,547 @@ export function Leaderboard() {
 }
 
 
+
+
+
+// ============================================================================
+// PAGE: BADGES COLLECTION
+// ============================================================================
+
+export function Badges() {
+  const [userBadges, setUserBadges] = useState<UserBadge[]>([]);
+  const [history, setHistory] = useState<BadgeUnlockHistory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [rarityFilter, setRarityFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All'); // All, Unlocked, Locked
+
+  const { showError, ToastComponent } = useToast();
+
+  const fetchBadgesData = async () => {
+    try {
+      setLoading(true);
+      const [badgesData, historyData] = await Promise.all([
+        api.getMyBadges(),
+        api.getBadgeHistory()
+      ]);
+      setUserBadges(badgesData);
+      setHistory(historyData);
+    } catch (err: any) {
+      showError(err.message || 'Failed to fetch badges data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBadgesData();
+  }, []);
+
+  const stats = useMemo(() => {
+    const total = userBadges.length;
+    const earned = userBadges.filter(b => b.is_unlocked).length;
+    const rate = total > 0 ? Math.round((earned / total) * 100) : 0;
+
+    const rarityCounts = {
+      Common: 0,
+      Rare: 0,
+      Epic: 0,
+      Legendary: 0
+    };
+    const earnedRarityCounts = {
+      Common: 0,
+      Rare: 0,
+      Epic: 0,
+      Legendary: 0
+    };
+
+    userBadges.forEach(ub => {
+      const r = ub.badge.rarity;
+      if (r in rarityCounts) {
+        rarityCounts[r]++;
+        if (ub.is_unlocked) {
+          earnedRarityCounts[r]++;
+        }
+      }
+    });
+
+    return { total, earned, rate, rarityCounts, earnedRarityCounts };
+  }, [userBadges]);
+
+  const filteredBadges = useMemo(() => {
+    return userBadges.filter(ub => {
+      const b = ub.badge;
+      const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        (b.description && b.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesCategory = categoryFilter === 'All' || b.category === categoryFilter;
+      const matchesRarity = rarityFilter === 'All' || b.rarity === rarityFilter;
+      const matchesStatus = statusFilter === 'All' || 
+        (statusFilter === 'Unlocked' && ub.is_unlocked) || 
+        (statusFilter === 'Locked' && !ub.is_unlocked);
+
+      return matchesSearch && matchesCategory && matchesRarity && matchesStatus;
+    });
+  }, [userBadges, searchQuery, categoryFilter, rarityFilter, statusFilter]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    userBadges.forEach(ub => set.add(ub.badge.category));
+    return ['All', ...Array.from(set)];
+  }, [userBadges]);
+
+  const renderBadgeIcon = (iconName: string, rarity: string, isUnlocked: boolean) => {
+    const iconSize = 30;
+    
+    // Choose icon based on name
+    let iconElement = <Award size={iconSize} />;
+    
+    const nameLower = iconName.toLowerCase();
+    if (nameLower.includes('clock') || nameLower.includes('hour') || nameLower.includes('time')) {
+      iconElement = <Clock size={iconSize} />;
+    } else if (nameLower.includes('streak') || nameLower.includes('flame') || nameLower.includes('fire')) {
+      iconElement = <Flame size={iconSize} />;
+    } else if (nameLower.includes('project') || nameLower.includes('folder') || nameLower.includes('work')) {
+      iconElement = <FolderGit2 size={iconSize} />;
+    } else if (nameLower.includes('tech') || nameLower.includes('code') || nameLower.includes('laptop') || nameLower.includes('road')) {
+      iconElement = <BookOpen size={iconSize} />;
+    } else if (nameLower.includes('leader') || nameLower.includes('rank') || nameLower.includes('trophy')) {
+      iconElement = <Trophy size={iconSize} />;
+    } else if (nameLower.includes('collector') || nameLower.includes('spark') || nameLower.includes('ultimate')) {
+      iconElement = <Sparkles size={iconSize} />;
+    }
+
+    let rarityClass = 'badge-icon-common';
+    if (rarity === 'Rare') rarityClass = 'badge-icon-rare';
+    else if (rarity === 'Epic') rarityClass = 'badge-icon-epic';
+    else if (rarity === 'Legendary') rarityClass = 'badge-icon-legendary';
+
+    if (!isUnlocked) {
+      rarityClass = 'badge-icon-locked';
+    }
+
+    return (
+      <div className={`badge-icon-container ${rarityClass}`}>
+        {iconElement}
+        {!isUnlocked && (
+          <div className="badge-lock-indicator">
+            <Lock size={10} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const getProgressBarColor = (rarity: string) => {
+    switch (rarity) {
+      case 'Rare': return 'var(--color-primary)';
+      case 'Epic': return 'var(--color-secondary)';
+      case 'Legendary': return '#fbbf24';
+      default: return 'var(--text-muted)';
+    }
+  };
+
+  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
+
+  return (
+    <Layout>
+      {ToastComponent}
+      <div className="page-header">
+        <div className="page-title-section">
+          <h1 className="page-title">Badge Collection</h1>
+          <span className="page-subtitle">Track your learning achievements, consistency streaks, and competition awards.</span>
+        </div>
+      </div>
+
+      {/* STATS OVERVIEW */}
+      <div className="badges-stats-grid">
+        <div className="badge-stat-card">
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Total Progression</span>
+          <span className="badge-stat-num">{stats.earned} / {stats.total}</span>
+          <div className="badge-progress-bar-container" style={{ margin: '0.5rem 0 0 0', height: '8px' }}>
+            <div className="badge-progress-bar-fill" style={{ width: `${stats.rate}%`, backgroundColor: 'var(--color-success)' }} />
+          </div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', marginTop: '0.25rem', fontWeight: 600 }}>{stats.rate}% Completed</span>
+        </div>
+
+        {['Common', 'Rare', 'Epic', 'Legendary'].map(rarity => {
+          const colorMap: Record<string, string> = {
+            Common: 'var(--text-muted)',
+            Rare: 'var(--color-primary)',
+            Epic: 'var(--color-secondary)',
+            Legendary: '#fbbf24'
+          };
+          const count = stats.rarityCounts[rarity as keyof typeof stats.rarityCounts] || 0;
+          const earned = stats.earnedRarityCounts[rarity as keyof typeof stats.earnedRarityCounts] || 0;
+          return (
+            <div key={rarity} className="badge-stat-card">
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{rarity} Badges</span>
+              <span className="badge-stat-num" style={{ color: colorMap[rarity] }}>{earned} / {count}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                {count > 0 ? Math.round((earned / count) * 100) : 0}% unlocked
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* FILTER & SEARCH BAR */}
+      <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
+          
+          {/* Search */}
+          <div style={{ position: 'relative', flex: '1 1 250px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input 
+              type="text" 
+              placeholder="Search badge name or description..." 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 1rem 0.5rem 2.25rem',
+                backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                color: 'var(--text-primary)',
+                outline: 'none',
+                fontSize: '0.9rem'
+              }}
+            />
+          </div>
+
+          {/* Filters */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+            
+            {/* Category Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Category:</span>
+              <select 
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                style={{
+                  padding: '0.4rem 0.75rem',
+                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                  fontSize: '0.85rem'
+                }}
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat} style={{ backgroundColor: '#18181b' }}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Rarity Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Rarity:</span>
+              <select 
+                value={rarityFilter}
+                onChange={e => setRarityFilter(e.target.value)}
+                style={{
+                  padding: '0.4rem 0.75rem',
+                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                  fontSize: '0.85rem'
+                }}
+              >
+                <option value="All" style={{ backgroundColor: '#18181b' }}>All Rarities</option>
+                <option value="Common" style={{ backgroundColor: '#18181b' }}>Common</option>
+                <option value="Rare" style={{ backgroundColor: '#18181b' }}>Rare</option>
+                <option value="Epic" style={{ backgroundColor: '#18181b' }}>Epic</option>
+                <option value="Legendary" style={{ backgroundColor: '#18181b' }}>Legendary</option>
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status:</span>
+              <select 
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                style={{
+                  padding: '0.4rem 0.75rem',
+                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                  fontSize: '0.85rem'
+                }}
+              >
+                <option value="All" style={{ backgroundColor: '#18181b' }}>All Badges</option>
+                <option value="Unlocked" style={{ backgroundColor: '#18181b' }}>Unlocked Only</option>
+                <option value="Locked" style={{ backgroundColor: '#18181b' }}>Locked Only</option>
+              </select>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      {/* TWO COLUMN GRID: BADGES & RECENT UNLOCKS */}
+      <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        
+        {/* Left: Badges Card Grid */}
+        <div style={{ flex: '1 1 600px' }}>
+          <h3 className="section-title" style={{ marginTop: 0 }}>My Achievements ({filteredBadges.length})</h3>
+          
+          {filteredBadges.length > 0 ? (
+            <div className="badge-collection-grid">
+              {filteredBadges.map(ub => {
+                const b = ub.badge;
+                const progressPercentage = ub.target_value > 0 ? Math.min(Math.round((ub.progress / ub.target_value) * 100), 100) : 0;
+                
+                let rarityClass = 'badge-card-common';
+                if (b.rarity === 'Rare') rarityClass = 'badge-card-rare';
+                else if (b.rarity === 'Epic') rarityClass = 'badge-card-epic';
+                else if (b.rarity === 'Legendary') rarityClass = 'badge-card-legendary';
+
+                if (!ub.is_unlocked) {
+                  rarityClass = 'badge-card-locked';
+                }
+
+                return (
+                  <div 
+                    key={b.id} 
+                    className={`badge-card ${rarityClass}`}
+                    onClick={() => setSelectedBadge(ub)}
+                  >
+                    {renderBadgeIcon(b.icon, b.rarity, ub.is_unlocked)}
+                    
+                    <strong style={{ fontSize: '0.95rem', color: ub.is_unlocked ? 'var(--text-primary)' : 'var(--text-muted)' }}>{b.name}</strong>
+                    
+                    <span className={`badge-rarity-pill badge-pill-${b.rarity.toLowerCase()}`}>
+                      {b.rarity}
+                    </span>
+
+                    {/* Progress representation */}
+                    {!ub.is_unlocked && ub.target_value > 0 && (
+                      <div style={{ width: '100%' }}>
+                        <div className="badge-progress-bar-container">
+                          <div 
+                            className="badge-progress-bar-fill" 
+                            style={{ 
+                              width: `${progressPercentage}%`, 
+                              backgroundColor: getProgressBarColor(b.rarity) 
+                            }} 
+                          />
+                        </div>
+                        <div className="badge-progress-text">
+                          {ub.progress} / {ub.target_value} ({progressPercentage}%)
+                        </div>
+                      </div>
+                    )}
+
+                    {ub.is_unlocked && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-success)', marginTop: '1rem', fontWeight: 600 }}>
+                        🏆 Unlocked
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="glass-card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <Award size={48} className="empty-icon" style={{ marginBottom: '1rem' }} />
+              <h3>No badges match your filters</h3>
+              <p>Try resetting the search query or drop downs to find more badges.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Recent Unlock History Feed */}
+        <div style={{ flex: '0 0 350px', width: '350px' }}>
+          <div className="glass-card" style={{ padding: '1.5rem', maxHeight: '600px', display: 'flex', flexDirection: 'column' }}>
+            <h3 style={{ fontSize: '1.1rem', marginTop: 0, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+              <Sparkles size={18} style={{ color: 'var(--color-secondary)' }} /> Recent Unlock Feed
+            </h3>
+            
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {history.length > 0 ? (
+                history.map(item => {
+                  const pillColor = item.rarity === 'Legendary' ? 'badge-pill-legendary' : 
+                    item.rarity === 'Epic' ? 'badge-pill-epic' : 
+                    item.rarity === 'Rare' ? 'badge-pill-rare' : 'badge-pill-common';
+
+                  return (
+                    <div 
+                      key={item.id} 
+                      style={{ 
+                        borderBottom: '1px solid rgba(255,255,255,0.03)', 
+                        paddingBottom: '0.75rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.25rem' 
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{item.badge_name}</strong>
+                        <span className={`badge-rarity-pill ${pillColor}`} style={{ fontSize: '0.55rem', margin: 0 }}>
+                          {item.rarity}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        Category: {item.category}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', gap: '0.5rem', marginTop: '0.1rem' }}>
+                        <span>📅 {item.unlock_date}</span>
+                        <span>⏰ {item.unlock_time}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>
+                  No badges unlocked yet. Keep coding and learning!
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* DETAIL OVERLAY MODAL */}
+      {selectedBadge && (
+        <div className="modal-overlay" style={{ zIndex: 1000 }} onClick={() => setSelectedBadge(null)}>
+          <div 
+            className="modal-content" 
+            style={{ 
+              maxWidth: '450px',
+              textAlign: 'center', 
+              padding: '2.25rem',
+              background: 'linear-gradient(180deg, #1f1f23 0%, #151518 100%)',
+              border: `1.5px solid ${
+                !selectedBadge.is_unlocked ? 'var(--border-color)' :
+                selectedBadge.badge.rarity === 'Legendary' ? '#fbbf24' :
+                selectedBadge.badge.rarity === 'Epic' ? 'var(--color-secondary)' :
+                selectedBadge.badge.rarity === 'Rare' ? 'var(--color-primary)' : 'rgba(255, 255, 255, 0.15)'
+              }`,
+              boxShadow: selectedBadge.is_unlocked ? `0 20px 40px ${
+                selectedBadge.badge.rarity === 'Legendary' ? 'rgba(245, 158, 11, 0.15)' :
+                selectedBadge.badge.rarity === 'Epic' ? 'rgba(139, 92, 246, 0.15)' :
+                selectedBadge.badge.rarity === 'Rare' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(0, 0, 0, 0.3)'
+              }` : '0 20px 40px rgba(0, 0, 0, 0.5)'
+            }} 
+            onClick={e => e.stopPropagation()}
+          >
+            <button 
+              className="btn-close" 
+              onClick={() => setSelectedBadge(null)}
+              style={{ position: 'absolute', right: '1.25rem', top: '1.25rem' }}
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
+              
+              {renderBadgeIcon(selectedBadge.badge.icon, selectedBadge.badge.rarity, selectedBadge.is_unlocked)}
+
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.5rem', marginBottom: 0 }}>
+                {selectedBadge.badge.name}
+              </h2>
+
+              <span className={`badge-rarity-pill badge-pill-${selectedBadge.badge.rarity.toLowerCase()}`} style={{ fontSize: '0.75rem' }}>
+                {selectedBadge.badge.rarity} Badge
+              </span>
+
+              <p style={{ 
+                fontSize: '0.95rem', 
+                color: 'var(--text-secondary)', 
+                lineHeight: 1.5,
+                margin: '0.75rem 0',
+                padding: '0 0.5rem'
+              }}>
+                {selectedBadge.badge.description || 'No description provided.'}
+              </p>
+
+              {/* Unlock criteria or details */}
+              <div 
+                style={{ 
+                  width: '100%', 
+                  backgroundColor: 'rgba(0, 0, 0, 0.2)', 
+                  border: '1px solid rgba(255, 255, 255, 0.03)', 
+                  borderRadius: '12px', 
+                  padding: '1rem',
+                  fontSize: '0.85rem',
+                  color: 'var(--text-secondary)',
+                  textAlign: 'left'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <span>Category:</span>
+                  <strong style={{ color: 'var(--text-primary)', float: 'right' }}>{selectedBadge.badge.category}</strong>
+                </div>
+                
+                {selectedBadge.badge.department && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <span>Scope:</span>
+                    <strong style={{ color: 'var(--text-primary)', float: 'right' }}>{selectedBadge.badge.department} Track Only</strong>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <span>Status:</span>
+                  <strong style={{ color: selectedBadge.is_unlocked ? 'var(--color-success)' : 'var(--text-muted)', float: 'right' }}>
+                    {selectedBadge.is_unlocked ? '🏆 Unlocked' : '🔒 Locked'}
+                  </strong>
+                </div>
+
+                {!selectedBadge.is_unlocked && selectedBadge.target_value > 0 && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <span>Progress:</span>
+                      <strong style={{ float: 'right' }}>{selectedBadge.progress} / {selectedBadge.target_value}</strong>
+                    </div>
+                    <div className="badge-progress-bar-container" style={{ margin: 0 }}>
+                      <div 
+                        className="badge-progress-bar-fill" 
+                        style={{ 
+                          width: `${Math.min(Math.round((selectedBadge.progress / selectedBadge.target_value) * 100), 100)}%`, 
+                          backgroundColor: getProgressBarColor(selectedBadge.badge.rarity) 
+                        }} 
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {selectedBadge.is_unlocked && selectedBadge.earned_at && (
+                  <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Unlocked On:</span>
+                      <strong style={{ float: 'right' }}>{new Date(selectedBadge.earned_at).toLocaleString()}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button 
+                className="btn btn-secondary" 
+                style={{ width: '100%', marginTop: '1rem' }} 
+                onClick={() => setSelectedBadge(null)}
+              >
+                Close Collection Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Layout>
+  );
+}
 
 // ============================================================================
 // PAGE: GALLERY SHOWCASE ZONE
@@ -2944,6 +3748,102 @@ export function Gallery() {
               <div className="empty-icon-wrap">🏆</div>
               <h3>No technologies cleared in the last 24 hours</h3>
               <p>Complete all checklist topics in any roadmap to celebrate your milestone here!</p>
+            </div>
+          )}
+        </div>
+
+        {/* Recent Badge Achievements */}
+        <div className="gallery-section">
+          <div className="section-header-modern">
+            <div className="header-icon-box">🎖️</div>
+            <div>
+              <h2 className="section-title-modern">Recent Badge Achievements</h2>
+              <p className="section-subtitle-modern">Celebrating developers who unlocked badges in the last 24 hours!</p>
+            </div>
+          </div>
+          
+          {data?.recent_badge_unlocks && data.recent_badge_unlocks.length > 0 ? (
+            <div className="learning-achievements-grid">
+              {data.recent_badge_unlocks.map((unlock: any) => {
+                const initials = unlock.user_name?.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+                const pillColor = unlock.rarity === 'Legendary' ? 'badge-pill-legendary' : 
+                  unlock.rarity === 'Epic' ? 'badge-pill-epic' : 
+                  unlock.rarity === 'Rare' ? 'badge-pill-rare' : 'badge-pill-common';
+
+                // Determine icon based on name or category
+                let badgeEmoji = "🎖️";
+                const catLower = unlock.category.toLowerCase();
+                const iconLower = (unlock.icon || "").toLowerCase();
+                if (iconLower.includes('clock') || catLower.includes('hour')) badgeEmoji = "⏰";
+                else if (iconLower.includes('streak') || catLower.includes('streak')) badgeEmoji = "🔥";
+                else if (iconLower.includes('project') || catLower.includes('project')) badgeEmoji = "📂";
+                else if (iconLower.includes('tech') || catLower.includes('roadmap')) badgeEmoji = "📚";
+                else if (iconLower.includes('leader') || catLower.includes('leader')) badgeEmoji = "🏆";
+                else if (iconLower.includes('collector') || catLower.includes('collector')) badgeEmoji = "✨";
+
+                return (
+                  <div 
+                    key={unlock.id} 
+                    className="tech-celebration-card" 
+                    style={{ 
+                      background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.005) 100%)',
+                      border: `1px solid ${
+                        unlock.rarity === 'Legendary' ? 'rgba(245, 158, 11, 0.35)' :
+                        unlock.rarity === 'Epic' ? 'rgba(139, 92, 246, 0.35)' :
+                        unlock.rarity === 'Rare' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255, 255, 255, 0.15)'
+                      }`,
+                      boxShadow: `0 10px 25px rgba(0, 0, 0, 0.2), 0 0 10px ${
+                        unlock.rarity === 'Legendary' ? 'rgba(245, 158, 11, 0.1)' :
+                        unlock.rarity === 'Epic' ? 'rgba(139, 92, 246, 0.1)' :
+                        unlock.rarity === 'Rare' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(0, 0, 0, 0.01)'
+                      }`
+                    }}
+                  >
+                    <div className="celebration-badge" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-muted)' }}>
+                      🎖️ BADGE UNLOCKED
+                    </div>
+                    
+                    <h3 className="celebration-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span>{badgeEmoji}</span> {unlock.badge_name}
+                    </h3>
+                    
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '-0.5rem' }}>
+                      <span className={`badge-rarity-pill ${pillColor}`} style={{ fontSize: '0.65rem', margin: 0 }}>
+                        {unlock.rarity}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)', padding: '0.2rem 0.5rem', borderRadius: '12px' }}>
+                        {unlock.category}
+                      </span>
+                    </div>
+                    
+                    <p className="celebration-desc" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      <strong>{unlock.user_name}</strong> earned this achievement!
+                      <span style={{ display: 'block', fontStyle: 'italic', marginTop: '0.35rem', color: 'var(--text-muted)' }}>
+                        "{unlock.description}"
+                      </span>
+                    </p>
+                    
+                    <div className="celebration-footer">
+                      <div className="creator-avatar" style={{ background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%)' }}>
+                        {initials}
+                      </div>
+                      <div className="creator-info">
+                        <span className="creator-name">{unlock.user_name}</span>
+                        <span className="creator-time">Unlocked at {unlock.unlock_time}</span>
+                      </div>
+                      <button className="highfive-btn-reaction" onClick={handleHighFive}>
+                        🎉 React
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty-section-state">
+              <div className="empty-icon-wrap">🎖️</div>
+              <h3>No badges earned in the last 24 hours</h3>
+              <p>Work on consistency, master roadmaps, or log hours to earn a badge and stand in the spotlight!</p>
             </div>
           )}
         </div>
@@ -4373,11 +5273,19 @@ export function AdminSettings() {
   const [targetHours, setTargetHours] = useState<number>(10);
   const [updatingTarget, setUpdatingTarget] = useState(false);
 
+  // Progression & Badge Management states
+  const [badgeStats, setBadgeStats] = useState<BadgeStats | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
+  const [awardUserId, setAwardUserId] = useState<number | ''>('');
+  const [awardBadgeCode, setAwardBadgeCode] = useState('');
+  const [awarding, setAwarding] = useState(false);
+
   const fetchData = async () => {
     try {
       const s = await api.adminGetSettings();
       const l = await api.adminGetEmailLogs();
       const u = await api.adminGetUsers();
+      const bStats = await api.adminGetBadgeStats();
       
       setDeadline(s.daily_log_deadline);
       setReminder(s.reminder_time);
@@ -4394,7 +5302,9 @@ export function AdminSettings() {
       if (u.length > 0) {
         setTargetUserId(u[0].id);
         setTargetHours(u[0].weekly_target_hours || 10);
+        setAwardUserId(u[0].id);
       }
+      setBadgeStats(bStats);
     } catch (err) {
       console.error(err);
     } finally {
@@ -4553,6 +5463,41 @@ export function AdminSettings() {
         }
       });
       setSelectedLogIds(newSelections);
+    }
+  };
+
+  const handleRecalculateBadges = async () => {
+    if (!window.confirm('Are you sure you want to recalculate ALL badges for all users? This will rebuild the entire leaderboard history week-by-week and re-evaluate badges. It might take a moment.')) return;
+    
+    setRecalculating(true);
+    try {
+      const res = await api.adminRecalculateBadges();
+      showSuccess(res.detail || 'Badges recalculated successfully!');
+      fetchData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to recalculate badges');
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
+  const handleForceAwardBadge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!awardUserId || !awardBadgeCode.trim()) {
+      showError('Please select a user and enter a badge code');
+      return;
+    }
+    
+    setAwarding(true);
+    try {
+      const res = await api.adminForceAwardBadge(Number(awardUserId), awardBadgeCode.trim());
+      showSuccess(res.detail || 'Badge forced-awarded successfully!');
+      setAwardBadgeCode('');
+      fetchData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to force-award badge');
+    } finally {
+      setAwarding(false);
     }
   };
 
@@ -4810,6 +5755,99 @@ export function AdminSettings() {
                 {sendingBroadcast ? 'Sending Broadcast...' : 'Broadcast Email to All Users'}
               </button>
             </form>
+          </div>
+
+          {/* Progression & Badge Management Card */}
+          <div className="glass-card section-card">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <ShieldCheck size={18} style={{ color: 'var(--color-success)' }} /> Progression & Badge Management
+            </h3>
+            
+            {badgeStats && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Badges</span>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>{badgeStats.total_badges}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Earned</span>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-success)' }}>{badgeStats.total_earned}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Global Completion Rate</span>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-primary)' }}>{badgeStats.completion_rate}%</div>
+                </div>
+              </div>
+            )}
+
+            {/* Recalculate Badges */}
+            <div style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <h4 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Recalculate Badges</h4>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: '1.4' }}>
+                Force-recalculate streaks, hours, roadmaps, and rank milestones for all active members.
+              </p>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={handleRecalculateBadges} 
+                disabled={recalculating}
+                style={{ width: '100%' }}
+              >
+                {recalculating ? 'Recalculating...' : '🔄 Run Global Recalculation'}
+              </button>
+            </div>
+
+            {/* Force Award Badge Form */}
+            <div>
+              <h4 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Force-Award Badge</h4>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: '1.4' }}>
+                Directly unlock a specific badge for any developer.
+              </p>
+              <form onSubmit={handleForceAwardBadge}>
+                <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }} htmlFor="award-user-select">Select Developer</label>
+                  <select 
+                    id="award-user-select"
+                    className="form-input form-select"
+                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                    value={awardUserId}
+                    onChange={(e) => setAwardUserId(Number(e.target.value))}
+                    disabled={awarding}
+                  >
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name} (@{u.username})</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }} htmlFor="award-badge-code-input">Badge Code</label>
+                  <input 
+                    id="award-badge-code-input"
+                    type="text" 
+                    placeholder="e.g. hours_10, streak_7, tech_css..." 
+                    className="form-input"
+                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                    value={awardBadgeCode}
+                    onChange={(e) => setAwardBadgeCode(e.target.value)}
+                    disabled={awarding}
+                  />
+                  <small style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                    Examples: hours_10, hours_50, streak_3, streak_7, project_1, tech_html, tech_css, tech_js, leaderboard_gold, ultimate_collector
+                  </small>
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  disabled={awarding || !awardUserId || !awardBadgeCode.trim()}
+                  style={{ width: '100%', fontSize: '0.85rem', padding: '0.5rem' }}
+                >
+                  {awarding ? 'Awarding...' : '🎖️ Award Badge'}
+                </button>
+              </form>
+            </div>
+
           </div>
         </div>
 
@@ -5810,6 +6848,11 @@ export default function App() {
             </ProtectedRoute>
           } />
 
+          <Route path="/badges" element={
+            <ProtectedRoute>
+              <Badges />
+            </ProtectedRoute>
+          } />
 
           <Route path="/profile" element={
             <ProtectedRoute>

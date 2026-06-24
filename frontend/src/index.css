@@ -1910,3 +1910,228 @@ h1, h2, h3, h4 {
     padding: 1.25rem;
   }
 }
+
+/* ==========================================
+   GAMIFIED BADGES & PROGRESSION
+   ========================================== */
+.badges-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.badge-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.badge-stat-num {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+}
+
+.badge-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.badge-card {
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.badge-card:hover {
+  transform: translateY(-5px);
+}
+
+.badge-card-locked {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.03);
+  opacity: 0.5;
+}
+
+.badge-card-locked:hover {
+  transform: none;
+  opacity: 0.6;
+}
+
+/* Rarity specific borders and glows */
+.badge-card-common {
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.01);
+}
+.badge-card-common:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3), inset 0 0 15px rgba(255, 255, 255, 0.02);
+}
+
+.badge-card-rare {
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: inset 0 0 10px rgba(59, 130, 246, 0.05);
+}
+.badge-card-rare:hover {
+  border-color: rgba(59, 130, 246, 0.6);
+  box-shadow: 0 10px 25px rgba(59, 130, 246, 0.15), inset 0 0 15px rgba(59, 130, 246, 0.1);
+}
+
+.badge-card-epic {
+  border-color: rgba(139, 92, 246, 0.3);
+  box-shadow: inset 0 0 10px rgba(139, 92, 246, 0.05);
+}
+.badge-card-epic:hover {
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow: 0 10px 25px rgba(139, 92, 246, 0.2), inset 0 0 15px rgba(139, 92, 246, 0.15);
+}
+
+.badge-card-legendary {
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: inset 0 0 12px rgba(245, 158, 11, 0.05);
+  animation: badgeLegendaryPulse 4s ease-in-out infinite alternate;
+}
+.badge-card-legendary:hover {
+  border-color: rgba(245, 158, 11, 0.7);
+  box-shadow: 0 10px 30px rgba(245, 158, 11, 0.3), inset 0 0 20px rgba(245, 158, 11, 0.2);
+}
+
+@keyframes badgeLegendaryPulse {
+  0% {
+    border-color: rgba(245, 158, 11, 0.3);
+    box-shadow: 0 0 5px rgba(245, 158, 11, 0.05), inset 0 0 10px rgba(245, 158, 11, 0.05);
+  }
+  100% {
+    border-color: rgba(251, 191, 36, 0.5);
+    box-shadow: 0 0 15px rgba(251, 191, 36, 0.15), inset 0 0 15px rgba(251, 191, 36, 0.1);
+  }
+}
+
+/* Badge Icon styles */
+.badge-icon-container {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  position: relative;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.badge-icon-common {
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.1) 0%, rgba(71, 85, 105, 0.2) 100%);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.badge-icon-rare {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(29, 78, 216, 0.2) 100%);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.badge-icon-epic {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(91, 33, 182, 0.2) 100%);
+  color: #c084fc;
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.badge-icon-legendary {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(180, 83, 9, 0.25) 100%);
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.badge-icon-locked {
+  background: rgba(0, 0, 0, 0.3);
+  color: #475569;
+  border-color: rgba(255, 255, 255, 0.02);
+}
+
+.badge-lock-indicator {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background: #18181b;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.badge-rarity-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  margin-top: 0.5rem;
+  display: inline-block;
+}
+
+.badge-pill-common {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+}
+
+.badge-pill-rare {
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+}
+
+.badge-pill-epic {
+  background: rgba(139, 92, 246, 0.1);
+  color: #c084fc;
+}
+
+.badge-pill-legendary {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+}
+
+.badge-progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  margin-top: 1rem;
+  overflow: hidden;
+}
+
+.badge-progress-bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.3s ease;
+}
+
+.badge-progress-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}

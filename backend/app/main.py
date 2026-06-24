@@ -398,6 +398,9 @@ try:
     if not has_techs or not has_admin:
         print("First-time startup: Seeding default database records...")
         crud.run_db_seeding(db)
+        
+    # Always seed badges to make sure they exist in the database
+    crud.seed_default_badges(db)
 except Exception as e:
     print(f"Error seeding database on startup: {e}")
 finally:
@@ -764,6 +767,9 @@ def log_work(log_data: schemas.DailyLogCreate, db: Session = Depends(get_db), cu
             detail=str(e)
         )
     
+    # Trigger badge evaluation
+    crud.check_and_update_badges(db, current_user.id)
+    
     # Map user name back for response schema
     db_log.user_name = current_user.full_name
     return db_log
@@ -852,6 +858,7 @@ def complete_topic_route(topic_id: int, db: Session = Depends(get_db), current_u
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     crud.complete_topic(db, current_user.id, topic_id)
+    crud.check_and_update_badges(db, current_user.id)
     return {"detail": "Topic marked as completed"}
 
 @app.delete(f"{settings.API_V1_STR}/roadmap/topics/{{topic_id}}/uncomplete")
@@ -859,6 +866,7 @@ def uncomplete_topic_route(topic_id: int, db: Session = Depends(get_db), current
     success = crud.uncomplete_topic(db, current_user.id, topic_id)
     if not success:
         raise HTTPException(status_code=400, detail="Topic was not marked as completed")
+    crud.check_and_update_badges(db, current_user.id)
     return {"detail": "Topic marked as incomplete"}
 
 # ==========================================
@@ -896,6 +904,7 @@ def user_log_project_hours(project_id: int, log_data: schemas.ProjectLogCreate, 
         
     try:
         db_log = crud.log_project_hours(db, project_id, current_user.id, log_data)
+        crud.check_and_update_badges(db, current_user.id)
     except ValueError as e:
         db.rollback()
         raise HTTPException(
@@ -912,7 +921,9 @@ def user_update_project(project_id: int, project_update: schemas.ProjectCreate, 
     if current_user.role != "admin" and project.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
         
-    return crud.update_project(db, project_id, project_update)
+    updated_project = crud.update_project(db, project_id, project_update)
+    crud.check_and_update_badges(db, project.user_id)
+    return updated_project
 
 @app.delete(f"{settings.API_V1_STR}/projects/{{project_id}}")
 def user_delete_project(project_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -1217,12 +1228,37 @@ def get_showcase(db: Session = Depends(get_db), current_user: models.User = Depe
             "created_at": act.created_at.isoformat()
         })
 
+    # 6. Recent Badge Unlocks (last 24 hours)
+    recent_badge_unlocks = db.query(models.BadgeUnlockHistory).filter(
+        models.BadgeUnlockHistory.unlock_timestamp >= cutoff_24h
+    ).order_by(models.BadgeUnlockHistory.unlock_timestamp.desc()).all()
+    
+    serialized_badge_unlocks = []
+    for bu in recent_badge_unlocks:
+        serialized_badge_unlocks.append({
+            "id": bu.id,
+            "user_id": bu.user_id,
+            "user_name": bu.user.full_name,
+            "username": bu.user.username,
+            "badge_id": bu.badge_id,
+            "badge_name": bu.badge_name,
+            "category": bu.category,
+            "rarity": bu.rarity,
+            "icon": bu.badge.icon,
+            "description": bu.badge.description,
+            "unlock_date": bu.unlock_date.isoformat(),
+            "unlock_time": bu.unlock_time,
+            "unlock_timestamp": bu.unlock_timestamp.isoformat(),
+            "unlock_source": bu.unlock_source
+        })
+
     return {
         "projects": serialized_projects,
         "daily_kings": serialized_daily_kings,
         "completed_techs": completed_techs,
         "weekly_legends": weekly_legends,
-        "activities": serialized_activities
+        "activities": serialized_activities,
+        "recent_badge_unlocks": serialized_badge_unlocks
     }
 
 # ==========================================
@@ -1823,6 +1859,154 @@ def trigger_broadcast_email(
     return {
         "detail": f"Broadcast processed. Sent {sent_count} emails successfully. Failed {failed_count} emails."
     }
+
+
+# ==========================================
+# BADGES & PROGRESSION MODULE
+# ==========================================
+
+@app.get(f"{settings.API_V1_STR}/badges/my", response_model=List[schemas.UserBadgeResponse])
+def get_my_badges(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    user_id = current_user.id
+    
+    # 1. Determine user's departments
+    user_depts = []
+    if current_user.primary_team:
+        p_lower = current_user.primary_team.lower()
+        if "front" in p_lower:
+            user_depts.append("Frontend")
+        elif "back" in p_lower:
+            user_depts.append("Backend")
+        elif "data" in p_lower or "db" in p_lower or "sql" in p_lower or "postgres" in p_lower:
+            user_depts.append("Database")
+    if current_user.secondary_team:
+        s_lower = current_user.secondary_team.lower()
+        if "front" in s_lower:
+            user_depts.append("Frontend")
+        elif "back" in s_lower:
+            user_depts.append("Backend")
+        elif "data" in s_lower or "db" in s_lower or "sql" in s_lower or "postgres" in s_lower:
+            user_depts.append("Database")
+            
+    # If no department (admin/unassigned), let them see all categories
+    if not user_depts:
+        badges = db.query(models.Badge).all()
+    else:
+        badges = db.query(models.Badge).filter(
+            (models.Badge.department == None) | (models.Badge.department.in_(user_depts))
+        ).all()
+        
+    user_badges = db.query(models.UserBadge).filter(models.UserBadge.user_id == user_id).all()
+    user_badge_map = {ub.badge_id: ub.earned_at for ub in user_badges}
+    
+    progress_recs = db.query(models.BadgeProgress).filter(models.BadgeProgress.user_id == user_id).all()
+    progress_map = {pr.badge_code: pr for pr in progress_recs}
+    
+    response = []
+    for b in badges:
+        earned_at = user_badge_map.get(b.id)
+        is_unlocked = earned_at is not None
+        
+        prog_rec = progress_map.get(b.code)
+        if prog_rec:
+            progress = prog_rec.current_value
+            target_value = prog_rec.target_value
+            is_unlocked = is_unlocked or prog_rec.is_completed
+        else:
+            progress = 0.0
+            target_value = float(b.required_value)
+            
+        response.append({
+            "badge": {
+                "id": b.id,
+                "code": b.code,
+                "name": b.name,
+                "description": b.description,
+                "category": b.category,
+                "rarity": b.rarity,
+                "icon": b.icon,
+                "required_value": b.required_value,
+                "department": b.department
+            },
+            "is_unlocked": is_unlocked,
+            "progress": progress,
+            "target_value": target_value,
+            "earned_at": earned_at
+        })
+    return response
+
+
+@app.get(f"{settings.API_V1_STR}/badges/history", response_model=List[schemas.BadgeUnlockHistoryResponse])
+def get_badge_history(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    history = db.query(models.BadgeUnlockHistory).filter(
+        models.BadgeUnlockHistory.user_id == current_user.id
+    ).order_by(models.BadgeUnlockHistory.unlock_timestamp.desc()).all()
+    return history
+
+
+@app.get(f"{settings.API_V1_STR}/admin/badges/stats", response_model=schemas.BadgeStatsResponse)
+def get_admin_badge_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    total_badges = db.query(models.Badge).count()
+    total_users = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).count()
+    total_earned = db.query(models.UserBadge).count()
+    
+    completion_rate = 0.0
+    if total_users > 0 and total_badges > 0:
+        completion_rate = round((total_earned / (total_users * total_badges)) * 100.0, 2)
+        
+    rarity_breakdown = {
+        "Common": db.query(models.UserBadge).join(models.Badge).filter(models.Badge.rarity == "Common").count(),
+        "Rare": db.query(models.UserBadge).join(models.Badge).filter(models.Badge.rarity == "Rare").count(),
+        "Epic": db.query(models.UserBadge).join(models.Badge).filter(models.Badge.rarity == "Epic").count(),
+        "Legendary": db.query(models.UserBadge).join(models.Badge).filter(models.Badge.rarity == "Legendary").count()
+    }
+    
+    categories = ["Hours", "Streak", "Project", "Frontend", "Backend", "Database", "Roadmap", "Competition", "Collector"]
+    category_breakdown = {}
+    for cat in categories:
+        category_breakdown[cat] = db.query(models.UserBadge).join(models.Badge).filter(models.Badge.category == cat).count()
+        
+    users_q = db.query(models.User).filter(models.User.role == "user", models.User.is_active == True).all()
+    user_distribution = []
+    for u in users_q:
+        badges_count = db.query(models.UserBadge).filter(models.UserBadge.user_id == u.id).count()
+        user_distribution.append({
+            "user_id": u.id,
+            "user_name": u.full_name,
+            "badges_count": badges_count
+        })
+    user_distribution.sort(key=lambda x: x["badges_count"], reverse=True)
+    
+    return {
+        "total_badges": total_badges,
+        "total_earned": total_earned,
+        "completion_rate": completion_rate,
+        "rarity_breakdown": rarity_breakdown,
+        "category_breakdown": category_breakdown,
+        "user_distribution": user_distribution
+    }
+
+
+@app.post(f"{settings.API_V1_STR}/admin/badges/recalculate")
+def post_admin_recalculate(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    crud.recalculate_all_badges(db)
+    return {"detail": "Badge progress and ranks recalculated successfully for all users"}
+
+
+@app.post(f"{settings.API_V1_STR}/admin/badges/award")
+def post_admin_award(payload: schemas.AdminAwardBadgeRequest, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    badge = crud.force_award_badge(db, payload.user_id, payload.badge_code)
+    if not badge:
+        raise HTTPException(status_code=400, detail="Badge already earned, invalid user, or invalid badge code")
+    return {"detail": f"Badge '{badge.name}' successfully awarded!"}
+
 
 
 # Messaging routers removed
