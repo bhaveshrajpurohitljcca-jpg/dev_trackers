@@ -1948,7 +1948,7 @@ def get_badge_history(db: Session = Depends(get_db), current_user: models.User =
     return history
 
 
-@app.get(f"{settings.API_V1_STR}/admin/badges/user/{user_id}", response_model=List[schemas.UserBadgeResponse])
+@app.get(f"{settings.API_V1_STR}/admin/badges/user/{{user_id}}", response_model=List[schemas.UserBadgeResponse])
 def get_user_badges(user_id: int, db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -2019,7 +2019,7 @@ def get_user_badges(user_id: int, db: Session = Depends(get_db), current_admin: 
     return response
 
 
-@app.get(f"{settings.API_V1_STR}/admin/badges/user/{user_id}/history", response_model=List[schemas.BadgeUnlockHistoryResponse])
+@app.get(f"{settings.API_V1_STR}/admin/badges/user/{{user_id}}/history", response_model=List[schemas.BadgeUnlockHistoryResponse])
 def get_user_badge_history(user_id: int, db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
     history = db.query(models.BadgeUnlockHistory).filter(
         models.BadgeUnlockHistory.user_id == user_id
