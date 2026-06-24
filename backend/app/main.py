@@ -401,6 +401,10 @@ try:
         
     # Always seed badges to make sure they exist in the database
     crud.seed_default_badges(db)
+    
+    # Always recalculate badges on startup to ensure badges match existing database logs
+    print("Startup: Recalculating badges for all users based on database state...")
+    crud.recalculate_all_badges(db)
 except Exception as e:
     print(f"Error seeding database on startup: {e}")
 finally:
