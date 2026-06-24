@@ -303,7 +303,7 @@ function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }
             </Link>
             <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`}>
               <ShieldCheck size={18} />
-              <span>Badge Management</span>
+              <span>Badge Collection</span>
             </Link>
             <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
               <Award size={18} />
@@ -2838,10 +2838,12 @@ export function Badges() {
           api.adminGetUsers(),
           api.adminGetBadgeStats()
         ]);
-        setUsersList(uList);
+        const devs = uList.filter(u => u.role === 'user');
+        setUsersList(devs);
         setBadgeStats(bStats);
-        if (uList.length > 0) {
-          setAwardUserId(uList[0].id);
+        if (devs.length > 0) {
+          setAwardUserId(devs[0].id);
+          setInspectUserId(devs[0].id);
         }
       } catch (err) {
         console.error(err);
@@ -2928,6 +2930,9 @@ export function Badges() {
 
   const filteredBadges = useMemo(() => {
     return userBadges.filter(ub => {
+      if (user?.role === 'admin') {
+        return ub.is_unlocked;
+      }
       const b = ub.badge;
       const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
         (b.description && b.description.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -2940,7 +2945,7 @@ export function Badges() {
 
       return matchesSearch && matchesCategory && matchesRarity && matchesStatus;
     });
-  }, [userBadges, searchQuery, categoryFilter, rarityFilter, statusFilter]);
+  }, [userBadges, searchQuery, categoryFilter, rarityFilter, statusFilter, user]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -3008,10 +3013,12 @@ export function Badges() {
       {ToastComponent}
       <div className="page-header">
         <div className="page-title-section">
-          <h1 className="page-title">Badge Management</h1>
+          <h1 className="page-title">{user?.role === 'admin' ? 'Badge Management' : 'Badge Collection'}</h1>
           <span className="page-subtitle">
-            {inspectUser 
-              ? `Viewing achievements, consistency streaks, and learning progress for ${inspectUser.full_name} (@${inspectUser.username}).` 
+            {user?.role === 'admin' 
+              ? (inspectUser 
+                  ? `Viewing achievements, consistency streaks, and learning progress for ${inspectUser.full_name} (@${inspectUser.username}).` 
+                  : 'Manage badges, run recalculations, and inspect user achievements.')
               : 'Track your learning achievements, consistency streaks, and milestone progression.'
             }
           </span>
@@ -3144,136 +3151,155 @@ export function Badges() {
       )}
 
       {/* STATS OVERVIEW */}
-      <div className="badges-stats-grid">
-        <div className="badge-stat-card">
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Total Progression</span>
-          <span className="badge-stat-num">{stats.earned} / {stats.total}</span>
-          <div className="badge-progress-bar-container" style={{ margin: '0.5rem 0 0 0', height: '8px' }}>
-            <div className="badge-progress-bar-fill" style={{ width: `${stats.rate}%`, backgroundColor: 'var(--color-success)' }} />
-          </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', marginTop: '0.25rem', fontWeight: 600 }}>{stats.rate}% Completed</span>
-        </div>
-
-        {['Common', 'Rare', 'Epic', 'Legendary'].map(rarity => {
-          const colorMap: Record<string, string> = {
-            Common: 'var(--text-muted)',
-            Rare: 'var(--color-primary)',
-            Epic: 'var(--color-secondary)',
-            Legendary: '#fbbf24'
-          };
-          const count = stats.rarityCounts[rarity as keyof typeof stats.rarityCounts] || 0;
-          const earned = stats.earnedRarityCounts[rarity as keyof typeof stats.earnedRarityCounts] || 0;
-          return (
-            <div key={rarity} className="badge-stat-card">
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{rarity} Badges</span>
-              <span className="badge-stat-num" style={{ color: colorMap[rarity] }}>{earned} / {count}</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                {count > 0 ? Math.round((earned / count) * 100) : 0}% unlocked
-              </span>
+      {user?.role === 'admin' ? (
+        inspectUser && (
+          <div className="glass-card" style={{ padding: '1rem 1.5rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Developer Achievements Status</span>
+              <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                {inspectUser.full_name} has unlocked <span style={{ color: 'var(--color-success)' }}>{stats.earned}</span> of <span style={{ color: 'var(--color-primary)' }}>{stats.total}</span> badges
+              </h2>
             </div>
-          );
-        })}
-      </div>
+            <div style={{ textAlign: 'right', minWidth: '100px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>Completion Rate</span>
+              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-secondary)' }}>{stats.rate}%</span>
+            </div>
+          </div>
+        )
+      ) : (
+        <div className="badges-stats-grid">
+          <div className="badge-stat-card">
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Total Progression</span>
+            <span className="badge-stat-num">{stats.earned} / {stats.total}</span>
+            <div className="badge-progress-bar-container" style={{ margin: '0.5rem 0 0 0', height: '8px' }}>
+              <div className="badge-progress-bar-fill" style={{ width: `${stats.rate}%`, backgroundColor: 'var(--color-success)' }} />
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', marginTop: '0.25rem', fontWeight: 600 }}>{stats.rate}% Completed</span>
+          </div>
+
+          {['Common', 'Rare', 'Epic', 'Legendary'].map(rarity => {
+            const colorMap: Record<string, string> = {
+              Common: 'var(--text-muted)',
+              Rare: 'var(--color-primary)',
+              Epic: 'var(--color-secondary)',
+              Legendary: '#fbbf24'
+            };
+            const count = stats.rarityCounts[rarity as keyof typeof stats.rarityCounts] || 0;
+            const earned = stats.earnedRarityCounts[rarity as keyof typeof stats.earnedRarityCounts] || 0;
+            return (
+              <div key={rarity} className="badge-stat-card">
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{rarity} Badges</span>
+                <span className="badge-stat-num" style={{ color: colorMap[rarity] }}>{earned} / {count}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  {count > 0 ? Math.round((earned / count) * 100) : 0}% unlocked
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* FILTER & SEARCH BAR */}
-      <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
-          
-          {/* Search */}
-          <div style={{ position: 'relative', flex: '1 1 250px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input 
-              type="text" 
-              placeholder="Search badge name or description..." 
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 1rem 0.5rem 2.25rem',
-                backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '8px',
-                color: 'var(--text-primary)',
-                outline: 'none',
-                fontSize: '0.9rem'
-              }}
-            />
-          </div>
-
-          {/* Filters */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+      {user?.role !== 'admin' && (
+        <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
             
-            {/* Category Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Category:</span>
-              <select 
-                value={categoryFilter}
-                onChange={e => setCategoryFilter(e.target.value)}
+            {/* Search */}
+            <div style={{ position: 'relative', flex: '1 1 250px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                placeholder="Search badge name or description..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
                 style={{
-                  padding: '0.4rem 0.75rem',
+                  width: '100%',
+                  padding: '0.5rem 1rem 0.5rem 2.25rem',
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
                   border: '1px solid var(--border-color)',
                   borderRadius: '8px',
                   color: 'var(--text-primary)',
                   outline: 'none',
-                  fontSize: '0.85rem'
+                  fontSize: '0.9rem'
                 }}
-              >
-                {categories.map(cat => (
-                  <option key={cat} value={cat} style={{ backgroundColor: '#18181b' }}>{cat}</option>
-                ))}
-              </select>
+              />
             </div>
 
-            {/* Rarity Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Rarity:</span>
-              <select 
-                value={rarityFilter}
-                onChange={e => setRarityFilter(e.target.value)}
-                style={{
-                  padding: '0.4rem 0.75rem',
-                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)',
-                  outline: 'none',
-                  fontSize: '0.85rem'
-                }}
-              >
-                <option value="All" style={{ backgroundColor: '#18181b' }}>All Rarities</option>
-                <option value="Common" style={{ backgroundColor: '#18181b' }}>Common</option>
-                <option value="Rare" style={{ backgroundColor: '#18181b' }}>Rare</option>
-                <option value="Epic" style={{ backgroundColor: '#18181b' }}>Epic</option>
-                <option value="Legendary" style={{ backgroundColor: '#18181b' }}>Legendary</option>
-              </select>
-            </div>
+            {/* Filters */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+              
+              {/* Category Filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Category:</span>
+                <select 
+                  value={categoryFilter}
+                  onChange={e => setCategoryFilter(e.target.value)}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  {categories.map(cat => (
+                    <option key={cat} value={cat} style={{ backgroundColor: '#18181b' }}>{cat}</option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Status Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status:</span>
-              <select 
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                style={{
-                  padding: '0.4rem 0.75rem',
-                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)',
-                  outline: 'none',
-                  fontSize: '0.85rem'
-                }}
-              >
-                <option value="All" style={{ backgroundColor: '#18181b' }}>All Badges</option>
-                <option value="Unlocked" style={{ backgroundColor: '#18181b' }}>Unlocked Only</option>
-                <option value="Locked" style={{ backgroundColor: '#18181b' }}>Locked Only</option>
-              </select>
-            </div>
+              {/* Rarity Filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Rarity:</span>
+                <select 
+                  value={rarityFilter}
+                  onChange={e => setRarityFilter(e.target.value)}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  <option value="All" style={{ backgroundColor: '#18181b' }}>All Rarities</option>
+                  <option value="Common" style={{ backgroundColor: '#18181b' }}>Common</option>
+                  <option value="Rare" style={{ backgroundColor: '#18181b' }}>Rare</option>
+                  <option value="Epic" style={{ backgroundColor: '#18181b' }}>Epic</option>
+                  <option value="Legendary" style={{ backgroundColor: '#18181b' }}>Legendary</option>
+                </select>
+              </div>
 
+              {/* Status Filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status:</span>
+                <select 
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  <option value="All" style={{ backgroundColor: '#18181b' }}>All Badges</option>
+                  <option value="Unlocked" style={{ backgroundColor: '#18181b' }}>Unlocked Only</option>
+                  <option value="Locked" style={{ backgroundColor: '#18181b' }}>Locked Only</option>
+                </select>
+              </div>
+
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* TWO COLUMN GRID: BADGES & RECENT UNLOCKS */}
       <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -3332,8 +3358,11 @@ export function Badges() {
                     )}
 
                     {ub.is_unlocked && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--color-success)', marginTop: '1rem', fontWeight: 600 }}>
-                        🏆 Unlocked
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-success)', marginTop: '0.75rem', fontWeight: 600 }}>
+                        🏆 {user?.role === 'admin' 
+                          ? `Earned ${ub.earned_at ? new Date(ub.earned_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''}`
+                          : 'Unlocked'
+                        }
                       </div>
                     )}
                   </div>
@@ -3343,8 +3372,17 @@ export function Badges() {
           ) : (
             <div className="glass-card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
               <Award size={48} className="empty-icon" style={{ marginBottom: '1rem' }} />
-              <h3>No badges match your filters</h3>
-              <p>Try resetting the search query or drop downs to find more badges.</p>
+              {user?.role === 'admin' ? (
+                <>
+                  <h3>No badges unlocked yet</h3>
+                  <p>This developer hasn't earned any achievements on the platform yet.</p>
+                </>
+              ) : (
+                <>
+                  <h3>No badges match your filters</h3>
+                  <p>Try resetting the search query or drop downs to find more badges.</p>
+                </>
+              )}
             </div>
           )}
         </div>
