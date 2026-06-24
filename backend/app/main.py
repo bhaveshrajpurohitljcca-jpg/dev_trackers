@@ -1948,6 +1948,85 @@ def get_badge_history(db: Session = Depends(get_db), current_user: models.User =
     return history
 
 
+@app.get(f"{settings.API_V1_STR}/admin/badges/user/{user_id}", response_model=List[schemas.UserBadgeResponse])
+def get_user_badges(user_id: int, db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user_depts = []
+    if user.primary_team:
+        p_lower = user.primary_team.lower()
+        if "front" in p_lower:
+            user_depts.append("Frontend")
+        elif "back" in p_lower:
+            user_depts.append("Backend")
+        elif "data" in p_lower or "db" in p_lower or "sql" in p_lower or "postgres" in p_lower:
+            user_depts.append("Database")
+    if user.secondary_team:
+        s_lower = user.secondary_team.lower()
+        if "front" in s_lower:
+            user_depts.append("Frontend")
+        elif "back" in s_lower:
+            user_depts.append("Backend")
+        elif "data" in s_lower or "db" in s_lower or "sql" in s_lower or "postgres" in s_lower:
+            user_depts.append("Database")
+            
+    if not user_depts:
+        badges = db.query(models.Badge).all()
+    else:
+        badges = db.query(models.Badge).filter(
+            (models.Badge.department == None) | (models.Badge.department.in_(user_depts))
+        ).all()
+        
+    user_badges = db.query(models.UserBadge).filter(models.UserBadge.user_id == user_id).all()
+    user_badge_map = {ub.badge_id: ub.earned_at for ub in user_badges}
+    
+    progress_recs = db.query(models.BadgeProgress).filter(models.BadgeProgress.user_id == user_id).all()
+    progress_map = {pr.badge_code: pr for pr in progress_recs}
+    
+    response = []
+    for b in badges:
+        earned_at = user_badge_map.get(b.id)
+        is_unlocked = earned_at is not None
+        
+        prog_rec = progress_map.get(b.code)
+        if prog_rec:
+            progress = prog_rec.current_value
+            target_value = prog_rec.target_value
+            is_unlocked = is_unlocked or prog_rec.is_completed
+        else:
+            progress = 0.0
+            target_value = float(b.required_value)
+            
+        response.append({
+            "badge": {
+                "id": b.id,
+                "code": b.code,
+                "name": b.name,
+                "description": b.description,
+                "category": b.category,
+                "rarity": b.rarity,
+                "icon": b.icon,
+                "required_value": b.required_value,
+                "department": b.department
+            },
+            "is_unlocked": is_unlocked,
+            "progress": progress,
+            "target_value": target_value,
+            "earned_at": earned_at
+        })
+    return response
+
+
+@app.get(f"{settings.API_V1_STR}/admin/badges/user/{user_id}/history", response_model=List[schemas.BadgeUnlockHistoryResponse])
+def get_user_badge_history(user_id: int, db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
+    history = db.query(models.BadgeUnlockHistory).filter(
+        models.BadgeUnlockHistory.user_id == user_id
+    ).order_by(models.BadgeUnlockHistory.unlock_timestamp.desc()).all()
+    return history
+
+
 @app.get(f"{settings.API_V1_STR}/admin/badges/stats", response_model=schemas.BadgeStatsResponse)
 def get_admin_badge_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     if current_user.role != "admin":

@@ -38,7 +38,8 @@ import {
   CalendarDays,
   Sliders,
   Search,
-  Sparkles
+  Sparkles,
+  Menu
 } from 'lucide-react';
 import { api } from './services/api';
 import type { User, DailyLog, RoadmapTech, Technology, Project, LeaderboardUser, EmailLog, Badge, UserBadge, BadgeUnlockHistory, BadgeStats } from './services/api';
@@ -173,8 +174,8 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
 
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
-  if (adminOnly && user.role !== 'admin') return <Navigate to="/dashboard" replace />;
-  if (!adminOnly && user.role === 'admin' && location.pathname !== '/profile' && location.pathname !== '/gallery') return <Navigate to="/admin/dashboard" replace />;
+  if (adminOnly && user.role !== 'admin') return <Navigate to="/profile" replace />;
+  if (!adminOnly && user.role === 'admin' && location.pathname !== '/profile' && location.pathname !== '/gallery' && location.pathname !== '/badges') return <Navigate to="/profile" replace />;
 
   return <>{children}</>;
 }
@@ -216,26 +217,34 @@ function useToast() {
 // LAYOUT & NAVIGATION
 // ============================================================================
 
-function Sidebar() {
+function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
+    onClose?.();
     navigate('/login');
   };
 
   if (!user) return null;
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
-        <BookOpen size={24} />
-        <span>DevTracker</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <BookOpen size={24} />
+          <span>DevTracker</span>
+        </div>
+        {onClose && (
+          <button className="mobile-sidebar-close" onClick={onClose}>
+            <X size={20} />
+          </button>
+        )}
       </div>
 
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" onClick={onClose}>
         {user.role === 'admin' ? (
           <>
             <Link to="/admin/dashboard" className={`sidebar-link ${location.pathname === '/admin/dashboard' ? 'active' : ''}`}>
@@ -263,7 +272,7 @@ function Sidebar() {
             </Link>
             <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`}>
               <ShieldCheck size={18} />
-              <span>Badge Collection</span>
+              <span>Badge Management</span>
             </Link>
             <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
               <Award size={18} />
@@ -294,7 +303,7 @@ function Sidebar() {
             </Link>
             <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`}>
               <ShieldCheck size={18} />
-              <span>Badge Collection</span>
+              <span>Badge Management</span>
             </Link>
             <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
               <Award size={18} />
@@ -305,7 +314,7 @@ function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        <Link to="/profile" style={{ textDecoration: 'none' }}>
+        <Link to="/profile" style={{ textDecoration: 'none' }} onClick={onClose}>
           <div className="sidebar-user">
             <div className="user-avatar">
               {user.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
@@ -511,10 +520,29 @@ function BadgeCelebrationModal({ badge, onClose }: { badge: any, onClose: () => 
 
 function Layout({ children }: { children: React.ReactNode }) {
   const { activeCelebrationBadge, setActiveCelebrationBadge } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="app-container">
-      <Sidebar />
+      {/* Mobile Top Bar */}
+      <div className="mobile-header">
+        <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+          <Menu size={24} />
+        </button>
+        <div className="mobile-logo">
+          <BookOpen size={20} />
+          <span>DevTracker</span>
+        </div>
+        <div style={{ width: 24 }}></div> {/* spacer to center logo */}
+      </div>
+
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      
+      {/* Overlay to click and close sidebar */}
+      {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>
+      )}
+
       <main className="main-content">
         {children}
       </main>
@@ -729,7 +757,7 @@ export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = location.state?.from?.pathname || '/dashboard';
+  const from = location.state?.from?.pathname || '/profile';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -746,7 +774,7 @@ export function Login() {
       // Fetch profile to redirect admin vs user
       const u = await api.getMe();
       if (u.role === 'admin') {
-        navigate('/admin/dashboard');
+        navigate('/profile');
       } else {
         navigate(from);
       }
@@ -2738,6 +2766,7 @@ export function Leaderboard() {
 // ============================================================================
 
 export function Badges() {
+  const { user } = useAuth();
   const [userBadges, setUserBadges] = useState<UserBadge[]>([]);
   const [history, setHistory] = useState<BadgeUnlockHistory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2749,15 +2778,50 @@ export function Badges() {
   const [rarityFilter, setRarityFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All'); // All, Unlocked, Locked
 
-  const { showError, ToastComponent } = useToast();
+  // Admin and Inspector States
+  const [usersList, setUsersList] = useState<User[]>([]);
+  const [inspectUserId, setInspectUserId] = useState<number | 'me'>('me');
+  const [badgeStats, setBadgeStats] = useState<BadgeStats | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
+  const [awardUserId, setAwardUserId] = useState<number | ''>('');
+  const [awardBadgeCode, setAwardBadgeCode] = useState('');
+  const [awarding, setAwarding] = useState(false);
 
-  const fetchBadgesData = async () => {
+  const { showSuccess, showError, ToastComponent } = useToast();
+
+  const formatBadgeProgress = (value: number, category: string) => {
+    if (category === 'Hours') {
+      const hours = Math.floor(value);
+      const minutes = Math.round((value - hours) * 60);
+      if (hours === 0 && minutes === 0) return '0 hrs';
+      if (hours === 0) return `${minutes}m`;
+      if (minutes === 0) return `${hours}h`;
+      return `${hours}h ${minutes}m`;
+    }
+    return value.toString();
+  };
+
+  const fetchBadgesData = async (targetUserId: number | 'me') => {
     try {
       setLoading(true);
-      const [badgesData, historyData] = await Promise.all([
-        api.getMyBadges(),
-        api.getBadgeHistory()
-      ]);
+      let badgesData: UserBadge[] = [];
+      let historyData: BadgeUnlockHistory[] = [];
+
+      if (targetUserId === 'me') {
+        const [bData, hData] = await Promise.all([
+          api.getMyBadges(),
+          api.getBadgeHistory()
+        ]);
+        badgesData = bData;
+        historyData = hData;
+      } else {
+        const [bData, hData] = await Promise.all([
+          api.adminGetUserBadges(targetUserId),
+          api.adminGetUserBadgeHistory(targetUserId)
+        ]);
+        badgesData = bData;
+        historyData = hData;
+      }
       setUserBadges(badgesData);
       setHistory(historyData);
     } catch (err: any) {
@@ -2767,9 +2831,69 @@ export function Badges() {
     }
   };
 
+  const fetchAdminData = async () => {
+    if (user?.role === 'admin') {
+      try {
+        const [uList, bStats] = await Promise.all([
+          api.adminGetUsers(),
+          api.adminGetBadgeStats()
+        ]);
+        setUsersList(uList);
+        setBadgeStats(bStats);
+        if (uList.length > 0) {
+          setAwardUserId(uList[0].id);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
   useEffect(() => {
-    fetchBadgesData();
-  }, []);
+    fetchAdminData();
+    fetchBadgesData('me');
+  }, [user]);
+
+  useEffect(() => {
+    fetchBadgesData(inspectUserId);
+  }, [inspectUserId]);
+
+  const handleRecalculateBadges = async () => {
+    if (!window.confirm('Are you sure you want to recalculate ALL badges for all users? This will rebuild the entire leaderboard history week-by-week and re-evaluate badges. It might take a moment.')) return;
+    
+    setRecalculating(true);
+    try {
+      const res = await api.adminRecalculateBadges();
+      showSuccess(res.detail || 'Badges recalculated successfully!');
+      fetchBadgesData(inspectUserId);
+      fetchAdminData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to recalculate badges');
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
+  const handleForceAwardBadge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!awardUserId || !awardBadgeCode.trim()) {
+      showError('Please select a user and enter a badge code');
+      return;
+    }
+    
+    setAwarding(true);
+    try {
+      const res = await api.adminForceAwardBadge(Number(awardUserId), awardBadgeCode.trim());
+      showSuccess(res.detail || 'Badge forced-awarded successfully!');
+      setAwardBadgeCode('');
+      fetchBadgesData(inspectUserId);
+      fetchAdminData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to force-award badge');
+    } finally {
+      setAwarding(false);
+    }
+  };
 
   const stats = useMemo(() => {
     const total = userBadges.length;
@@ -2877,15 +3001,147 @@ export function Badges() {
 
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
 
+  const inspectUser = inspectUserId === 'me' ? null : usersList.find(u => u.id === inspectUserId);
+
   return (
     <Layout>
       {ToastComponent}
       <div className="page-header">
         <div className="page-title-section">
-          <h1 className="page-title">Badge Collection</h1>
-          <span className="page-subtitle">Track your learning achievements, consistency streaks, and competition awards.</span>
+          <h1 className="page-title">Badge Management</h1>
+          <span className="page-subtitle">
+            {inspectUser 
+              ? `Viewing achievements, consistency streaks, and learning progress for ${inspectUser.full_name} (@${inspectUser.username}).` 
+              : 'Track your learning achievements, consistency streaks, and milestone progression.'
+            }
+          </span>
         </div>
       </div>
+
+      {/* DEVELOPER BADGE INSPECTOR (ADMIN ONLY) */}
+      {user?.role === 'admin' && (
+        <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <label style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            🔍 Developer Badge Inspector:
+          </label>
+          <select
+            value={inspectUserId}
+            onChange={(e) => setInspectUserId(e.target.value === 'me' ? 'me' : Number(e.target.value))}
+            style={{
+              padding: '0.5rem 1rem',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              color: 'var(--text-primary)',
+              fontWeight: 600,
+              outline: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="me" style={{ backgroundColor: '#18181b' }}>My Own Achievements</option>
+            {usersList.map(u => (
+              <option key={u.id} value={u.id} style={{ backgroundColor: '#18181b' }}>
+                {u.full_name} (@{u.username})
+              </option>
+            ))}
+          </select>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            {inspectUserId === 'me' ? 'Viewing your own badges.' : `Viewing achievements for the selected developer: ${inspectUser?.full_name}.`}
+          </span>
+        </div>
+      )}
+
+      {/* ADMIN CONTROLS (ADMIN ONLY) */}
+      {user?.role === 'admin' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+          
+          {/* Global Recalculation Card */}
+          <div className="glass-card section-card" style={{ padding: '1.5rem', margin: 0 }}>
+            <h3 className="section-title" style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+              <Sliders size={18} style={{ color: 'var(--color-primary)' }} /> Global Recalculation
+            </h3>
+            
+            {badgeStats && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                <div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Total Badges</span>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{badgeStats.total_badges}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Total Earned</span>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-success)' }}>{badgeStats.total_earned}</div>
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Global Completion Rate</span>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-primary)' }}>{badgeStats.completion_rate}%</div>
+                </div>
+              </div>
+            )}
+            
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.4' }}>
+              Force-recalculate streaks, hours, roadmaps, and rank milestones for all active members.
+            </p>
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              onClick={handleRecalculateBadges} 
+              disabled={recalculating}
+              style={{ width: '100%' }}
+            >
+              {recalculating ? 'Recalculating...' : '🔄 Run Global Recalculation'}
+            </button>
+          </div>
+
+          {/* Force Award Badge Card */}
+          <div className="glass-card section-card" style={{ padding: '1.5rem', margin: 0 }}>
+            <h3 className="section-title" style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+              <Award size={18} style={{ color: 'var(--color-success)' }} /> Force-Award Badge
+            </h3>
+            
+            <form onSubmit={handleForceAwardBadge}>
+              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label" style={{ fontSize: '0.75rem' }} htmlFor="award-user-select">Select Developer</label>
+                <select 
+                  id="award-user-select"
+                  className="form-input form-select"
+                  style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                  value={awardUserId}
+                  onChange={(e) => setAwardUserId(Number(e.target.value))}
+                  disabled={awarding}
+                >
+                  {usersList.map(u => (
+                    <option key={u.id} value={u.id}>{u.full_name} (@{u.username})</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label" style={{ fontSize: '0.75rem' }} htmlFor="award-badge-code-input">Badge Code</label>
+                <input 
+                  id="award-badge-code-input"
+                  type="text" 
+                  placeholder="e.g. hours_10, streak_7..." 
+                  className="form-input"
+                  style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                  value={awardBadgeCode}
+                  onChange={(e) => setAwardBadgeCode(e.target.value)}
+                  disabled={awarding}
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                className="btn btn-primary" 
+                disabled={awarding || !awardUserId || !awardBadgeCode.trim()}
+                style={{ width: '100%', fontSize: '0.85rem', padding: '0.5rem' }}
+              >
+                {awarding ? 'Awarding...' : '🎖️ Award Badge'}
+              </button>
+            </form>
+          </div>
+
+        </div>
+      )}
 
       {/* STATS OVERVIEW */}
       <div className="badges-stats-grid">
@@ -3024,7 +3280,9 @@ export function Badges() {
         
         {/* Left: Badges Card Grid */}
         <div style={{ flex: '1 1 600px' }}>
-          <h3 className="section-title" style={{ marginTop: 0 }}>My Achievements ({filteredBadges.length})</h3>
+          <h3 className="section-title" style={{ marginTop: 0 }}>
+            {inspectUserId === 'me' ? 'My Achievements' : `${inspectUser?.full_name}'s Achievements`} ({filteredBadges.length})
+          </h3>
           
           {filteredBadges.length > 0 ? (
             <div className="badge-collection-grid">
@@ -3068,7 +3326,7 @@ export function Badges() {
                           />
                         </div>
                         <div className="badge-progress-text">
-                          {ub.progress} / {ub.target_value} ({progressPercentage}%)
+                          {formatBadgeProgress(ub.progress, b.category)} / {formatBadgeProgress(ub.target_value, b.category)} ({progressPercentage}%)
                         </div>
                       </div>
                     )}
@@ -3233,7 +3491,7 @@ export function Badges() {
                   <div style={{ marginTop: '0.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                       <span>Progress:</span>
-                      <strong style={{ float: 'right' }}>{selectedBadge.progress} / {selectedBadge.target_value}</strong>
+                      <strong style={{ float: 'right' }}>{formatBadgeProgress(selectedBadge.progress, selectedBadge.badge.category)} / {formatBadgeProgress(selectedBadge.target_value, selectedBadge.badge.category)}</strong>
                     </div>
                     <div className="badge-progress-bar-container" style={{ margin: 0 }}>
                       <div 
@@ -4001,7 +4259,7 @@ export function Profile() {
       </div>
 
       {profile?.user?.role === 'admin' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem', alignItems: 'start' }}>
+        <div className="profile-grid">
           {/* Left Column: Avatar & Basic Info */}
           <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '2.5rem 2rem' }}>
             <div className="user-avatar" style={{ width: '80px', height: '80px', fontSize: '2rem', marginBottom: '1rem' }}>
@@ -4042,7 +4300,7 @@ export function Profile() {
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem', alignItems: 'start' }}>
+        <div className="profile-grid">
           {/* Left Column: Avatar & Basic Info */}
           <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '2.5rem 2rem' }}>
             <div className="user-avatar" style={{ width: '80px', height: '80px', fontSize: '2rem', marginBottom: '1rem' }}>
@@ -4179,7 +4437,7 @@ export function Profile() {
                 const dPath = `M ${points.join(' L ')}`;
 
                 return (
-                  <div style={{ position: 'relative', width: '100%', overflowX: 'visible' }}>
+                  <div style={{ position: 'relative', width: '100%', overflowX: 'auto' }}>
                     <svg 
                       viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
                       width="100%" 
@@ -5241,7 +5499,8 @@ export function AdminRoadmaps() {
 export function AdminSettings() {
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [savingSmtp, setSavingSmtp] = useState(false);
   const { showSuccess, showError, ToastComponent } = useToast();
 
   // Form states
@@ -5273,19 +5532,11 @@ export function AdminSettings() {
   const [targetHours, setTargetHours] = useState<number>(10);
   const [updatingTarget, setUpdatingTarget] = useState(false);
 
-  // Progression & Badge Management states
-  const [badgeStats, setBadgeStats] = useState<BadgeStats | null>(null);
-  const [recalculating, setRecalculating] = useState(false);
-  const [awardUserId, setAwardUserId] = useState<number | ''>('');
-  const [awardBadgeCode, setAwardBadgeCode] = useState('');
-  const [awarding, setAwarding] = useState(false);
-
   const fetchData = async () => {
     try {
       const s = await api.adminGetSettings();
       const l = await api.adminGetEmailLogs();
       const u = await api.adminGetUsers();
-      const bStats = await api.adminGetBadgeStats();
       
       setDeadline(s.daily_log_deadline);
       setReminder(s.reminder_time);
@@ -5302,9 +5553,7 @@ export function AdminSettings() {
       if (u.length > 0) {
         setTargetUserId(u[0].id);
         setTargetHours(u[0].weekly_target_hours || 10);
-        setAwardUserId(u[0].id);
       }
-      setBadgeStats(bStats);
     } catch (err) {
       console.error(err);
     } finally {
@@ -5316,7 +5565,7 @@ export function AdminSettings() {
     fetchData();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSaveSystemConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deadline || !reminder || !grace || !dayCutoffTime) {
       showError('Please fill in all fields');
@@ -5330,12 +5579,9 @@ export function AdminSettings() {
     }
 
     const p = parseInt(smtpPort);
-    if (isNaN(p) || p <= 0) {
-      showError('SMTP port must be a valid positive number');
-      return;
-    }
+    const portVal = isNaN(p) ? 587 : p;
 
-    setSaving(true);
+    setSavingConfig(true);
     try {
       await api.adminUpdateSettings({
         daily_log_deadline: deadline,
@@ -5343,16 +5589,53 @@ export function AdminSettings() {
         grace_period_minutes: g,
         day_cutoff_time: dayCutoffTime,
         smtp_host: smtpHost,
+        smtp_port: portVal,
+        smtp_user: smtpUser,
+        smtp_password: smtpPassword
+      });
+      showSuccess('System configuration successfully updated!');
+      fetchData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to update system configuration');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleSaveSmtpSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!smtpHost || !smtpPort) {
+      showError('SMTP server host and port are required');
+      return;
+    }
+
+    const p = parseInt(smtpPort);
+    if (isNaN(p) || p <= 0) {
+      showError('SMTP port must be a valid positive number');
+      return;
+    }
+
+    const g = parseInt(grace);
+    const graceVal = isNaN(g) ? 15 : g;
+
+    setSavingSmtp(true);
+    try {
+      await api.adminUpdateSettings({
+        daily_log_deadline: deadline || '22:00',
+        reminder_time: reminder || '21:30',
+        grace_period_minutes: graceVal,
+        day_cutoff_time: dayCutoffTime || '00:00',
+        smtp_host: smtpHost,
         smtp_port: p,
         smtp_user: smtpUser,
         smtp_password: smtpPassword
       });
-      showSuccess('System settings successfully updated!');
+      showSuccess('SMTP server settings successfully updated!');
       fetchData();
     } catch (err: any) {
-      showError(err.message || 'Failed to update settings');
+      showError(err.message || 'Failed to update SMTP server settings');
     } finally {
-      setSaving(false);
+      setSavingSmtp(false);
     }
   };
 
@@ -5466,40 +5749,7 @@ export function AdminSettings() {
     }
   };
 
-  const handleRecalculateBadges = async () => {
-    if (!window.confirm('Are you sure you want to recalculate ALL badges for all users? This will rebuild the entire leaderboard history week-by-week and re-evaluate badges. It might take a moment.')) return;
-    
-    setRecalculating(true);
-    try {
-      const res = await api.adminRecalculateBadges();
-      showSuccess(res.detail || 'Badges recalculated successfully!');
-      fetchData();
-    } catch (err: any) {
-      showError(err.message || 'Failed to recalculate badges');
-    } finally {
-      setRecalculating(false);
-    }
-  };
 
-  const handleForceAwardBadge = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!awardUserId || !awardBadgeCode.trim()) {
-      showError('Please select a user and enter a badge code');
-      return;
-    }
-    
-    setAwarding(true);
-    try {
-      const res = await api.adminForceAwardBadge(Number(awardUserId), awardBadgeCode.trim());
-      showSuccess(res.detail || 'Badge forced-awarded successfully!');
-      setAwardBadgeCode('');
-      fetchData();
-    } catch (err: any) {
-      showError(err.message || 'Failed to force-award badge');
-    } finally {
-      setAwarding(false);
-    }
-  };
 
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
 
@@ -5521,7 +5771,7 @@ export function AdminSettings() {
               <Sliders size={18} style={{ color: 'var(--color-primary)' }} /> System Configuration
             </h3>
             
-            <form onSubmit={handleSubmit} style={{ marginTop: '1.25rem' }}>
+            <form onSubmit={handleSaveSystemConfig} style={{ marginTop: '1.25rem' }}>
               <div className="form-group">
                 <label className="form-label" htmlFor="deadline-input">Daily Log Submission Deadline</label>
                 <input 
@@ -5531,7 +5781,7 @@ export function AdminSettings() {
                   className="form-input" 
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
-                  disabled={saving}
+                  disabled={savingConfig}
                 />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Format: HH:MM (24-hour clock)</span>
               </div>
@@ -5545,7 +5795,7 @@ export function AdminSettings() {
                   className="form-input" 
                   value={reminder}
                   onChange={(e) => setReminder(e.target.value)}
-                  disabled={saving}
+                  disabled={savingConfig}
                 />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Format: HH:MM (24-hour clock)</span>
               </div>
@@ -5558,7 +5808,7 @@ export function AdminSettings() {
                   className="form-input" 
                   value={grace}
                   onChange={(e) => setGrace(e.target.value)}
-                  disabled={saving}
+                  disabled={savingConfig}
                 />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Minutes to allow logs past deadline</span>
               </div>
@@ -5572,95 +5822,102 @@ export function AdminSettings() {
                   className="form-input" 
                   value={dayCutoffTime}
                   onChange={(e) => setDayCutoffTime(e.target.value)}
-                  disabled={saving}
+                  disabled={savingConfig}
                 />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Format: HH:MM (24-hour clock). Any logs submitted before this cutoff on the next calendar day will automatically be logged for the previous day.</span>
               </div>
 
-              {/* SMTP Settings Segment */}
-              <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px dashed var(--border-color)' }}>
-                <h4 className="section-title" style={{ fontSize: '0.95rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Mail size={16} style={{ color: 'var(--color-secondary)' }} /> Admin Gmail SMTP Server
-                </h4>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: '1.4' }}>
-                  Provide the Gmail address and a 16-character Google <strong>App Password</strong> (generate this in Google Account &gt; Security &gt; 2-Step Verification &gt; App passwords) to send real outbox notifications.
-                </p>
+              <button className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }} type="submit" disabled={savingConfig}>
+                {savingConfig ? 'Saving...' : 'Save System Configuration'}
+              </button>
+            </form>
+          </div>
 
-                <div className="form-group">
-                  <label className="form-label" htmlFor="smtp-host-input">SMTP Server Host</label>
+          {/* SMTP Settings Card */}
+          <div className="glass-card section-card">
+            <h3 className="section-title">
+              <Mail size={18} style={{ color: 'var(--color-secondary)' }} /> Admin Gmail SMTP Server
+            </h3>
+            
+            <form onSubmit={handleSaveSmtpSettings} style={{ marginTop: '1.25rem' }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: '1.4' }}>
+                Provide the Gmail address and a 16-character Google <strong>App Password</strong> (generate this in Google Account &gt; Security &gt; 2-Step Verification &gt; App passwords) to send real outbox notifications.
+              </p>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="smtp-host-input">SMTP Server Host</label>
+                <input 
+                  id="smtp-host-input"
+                  type="text" 
+                  className="form-input" 
+                  value={smtpHost}
+                  onChange={(e) => setSmtpHost(e.target.value)}
+                  disabled={savingSmtp}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="smtp-port-input">SMTP Server Port</label>
+                <input 
+                  id="smtp-port-input"
+                  type="number" 
+                  className="form-input" 
+                  value={smtpPort}
+                  onChange={(e) => setSmtpPort(e.target.value)}
+                  disabled={savingSmtp}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="smtp-user-input">Sender Gmail Address (Admin)</label>
+                <input 
+                  id="smtp-user-input"
+                  type="email" 
+                  placeholder="e.g. your-admin-email@gmail.com"
+                  className="form-input" 
+                  value={smtpUser}
+                  onChange={(e) => setSmtpUser(e.target.value)}
+                  disabled={savingSmtp}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="smtp-password-input">Google App Password (16 chars)</label>
+                <div style={{ position: 'relative' }}>
                   <input 
-                    id="smtp-host-input"
-                    type="text" 
+                    id="smtp-password-input"
+                    type={showSmtpPassword ? "text" : "password"} 
+                    placeholder="e.g. abcd efgh ijkl mnop"
                     className="form-input" 
-                    value={smtpHost}
-                    onChange={(e) => setSmtpHost(e.target.value)}
-                    disabled={saving}
+                    style={{ paddingRight: '2.5rem' }}
+                    value={smtpPassword}
+                    onChange={(e) => setSmtpPassword(e.target.value)}
+                    disabled={savingSmtp}
                   />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="smtp-port-input">SMTP Server Port</label>
-                  <input 
-                    id="smtp-port-input"
-                    type="number" 
-                    className="form-input" 
-                    value={smtpPort}
-                    onChange={(e) => setSmtpPort(e.target.value)}
-                    disabled={saving}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="smtp-user-input">Sender Gmail Address (Admin)</label>
-                  <input 
-                    id="smtp-user-input"
-                    type="email" 
-                    placeholder="e.g. your-admin-email@gmail.com"
-                    className="form-input" 
-                    value={smtpUser}
-                    onChange={(e) => setSmtpUser(e.target.value)}
-                    disabled={saving}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="smtp-password-input">Google App Password (16 chars)</label>
-                  <div style={{ position: 'relative' }}>
-                    <input 
-                      id="smtp-password-input"
-                      type={showSmtpPassword ? "text" : "password"} 
-                      placeholder="e.g. abcd efgh ijkl mnop"
-                      className="form-input" 
-                      style={{ paddingRight: '2.5rem' }}
-                      value={smtpPassword}
-                      onChange={(e) => setSmtpPassword(e.target.value)}
-                      disabled={saving}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowSmtpPassword(!showSmtpPassword)}
-                      style={{
-                        position: 'absolute',
-                        right: '12px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-secondary)',
-                        cursor: 'pointer',
-                        padding: 0,
-                        display: 'flex',
-                        alignItems: 'center'
-                      }}
-                    >
-                      {showSmtpPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    {showSmtpPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
               </div>
 
-              <button className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }} type="submit" disabled={saving}>
-                {saving ? 'Saving...' : 'Save Settings'}
+              <button className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }} type="submit" disabled={savingSmtp}>
+                {savingSmtp ? 'Saving...' : 'Save SMTP Settings'}
               </button>
             </form>
           </div>
@@ -5755,99 +6012,6 @@ export function AdminSettings() {
                 {sendingBroadcast ? 'Sending Broadcast...' : 'Broadcast Email to All Users'}
               </button>
             </form>
-          </div>
-
-          {/* Progression & Badge Management Card */}
-          <div className="glass-card section-card">
-            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <ShieldCheck size={18} style={{ color: 'var(--color-success)' }} /> Progression & Badge Management
-            </h3>
-            
-            {badgeStats && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Badges</span>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>{badgeStats.total_badges}</div>
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Earned</span>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-success)' }}>{badgeStats.total_earned}</div>
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Global Completion Rate</span>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-primary)' }}>{badgeStats.completion_rate}%</div>
-                </div>
-              </div>
-            )}
-
-            {/* Recalculate Badges */}
-            <div style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <h4 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Recalculate Badges</h4>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: '1.4' }}>
-                Force-recalculate streaks, hours, roadmaps, and rank milestones for all active members.
-              </p>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={handleRecalculateBadges} 
-                disabled={recalculating}
-                style={{ width: '100%' }}
-              >
-                {recalculating ? 'Recalculating...' : '🔄 Run Global Recalculation'}
-              </button>
-            </div>
-
-            {/* Force Award Badge Form */}
-            <div>
-              <h4 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Force-Award Badge</h4>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: '1.4' }}>
-                Directly unlock a specific badge for any developer.
-              </p>
-              <form onSubmit={handleForceAwardBadge}>
-                <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                  <label className="form-label" style={{ fontSize: '0.75rem' }} htmlFor="award-user-select">Select Developer</label>
-                  <select 
-                    id="award-user-select"
-                    className="form-input form-select"
-                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
-                    value={awardUserId}
-                    onChange={(e) => setAwardUserId(Number(e.target.value))}
-                    disabled={awarding}
-                  >
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.full_name} (@{u.username})</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label" style={{ fontSize: '0.75rem' }} htmlFor="award-badge-code-input">Badge Code</label>
-                  <input 
-                    id="award-badge-code-input"
-                    type="text" 
-                    placeholder="e.g. hours_10, streak_7, tech_css..." 
-                    className="form-input"
-                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
-                    value={awardBadgeCode}
-                    onChange={(e) => setAwardBadgeCode(e.target.value)}
-                    disabled={awarding}
-                  />
-                  <small style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
-                    Examples: hours_10, hours_50, streak_3, streak_7, project_1, tech_html, tech_css, tech_js, leaderboard_gold, ultimate_collector
-                  </small>
-                </div>
-
-                <button 
-                  type="submit" 
-                  className="btn btn-primary" 
-                  disabled={awarding || !awardUserId || !awardBadgeCode.trim()}
-                  style={{ width: '100%', fontSize: '0.85rem', padding: '0.5rem' }}
-                >
-                  {awarding ? 'Awarding...' : '🎖️ Award Badge'}
-                </button>
-              </form>
-            </div>
-
           </div>
         </div>
 
@@ -6896,7 +7060,7 @@ export default function App() {
           // /admin/messages route removed
 
           {/* FALLBACK REDIRECTS */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/profile" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

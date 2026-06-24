@@ -450,4 +450,12 @@ export const api = {
       body: JSON.stringify({ user_id: userId, badge_code: badgeCode })
     });
   },
+
+  async adminGetUserBadges(userId: number): Promise<UserBadge[]> {
+    return request<UserBadge[]>(`/admin/badges/user/${userId}`);
+  },
+
+  async adminGetUserBadgeHistory(userId: number): Promise<BadgeUnlockHistory[]> {
+    return request<BadgeUnlockHistory[]>(`/admin/badges/user/${userId}/history`);
+  },
 };

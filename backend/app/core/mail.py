@@ -4,8 +4,22 @@ from email.mime.multipart import MIMEMultipart
 import logging
 from typing import Optional
 from app.core.config import settings
+import socket
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
+
+@contextmanager
+def force_ipv4_dns():
+    original_getaddrinfo = socket.getaddrinfo
+    def ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        # Force AF_INET (IPv4)
+        return original_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+    socket.getaddrinfo = ipv4_getaddrinfo
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
 
 def send_email_smtp(
     recipient_email: str, 
@@ -22,20 +36,8 @@ def send_email_smtp(
     user = smtp_user or settings.SMTP_USER
     password = smtp_password or settings.SMTP_PASSWORD
 
-    # Force IPv4 resolution to bypass IPv6 'Network is unreachable' errors on hosts (like Render)
-    original_host = host
-    import socket
-    try:
-        addr_info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
-        if addr_info:
-            # Use the first IPv4 address returned
-            host = addr_info[0][4][0]
-            logger.info(f"Forced IPv4 resolution: resolved {original_host} to {host}")
-    except Exception as dns_err:
-        logger.warning(f"Could not force IPv4 resolution for {original_host}: {dns_err}")
-
     # Check if SMTP settings are configured
-    if not user or not password:
+    if not user or not password or not host:
         err = "SMTP credentials not configured"
         logger.warning(f"{err}. Mock logging email to {recipient_email}")
         return False, err
@@ -55,23 +57,24 @@ def send_email_smtp(
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
 
-        if port == 465:
-            logger.info(f"Connecting to SMTP SSL server {host}:{port} with 10s timeout...")
-            server = smtplib.SMTP_SSL(host, port, timeout=10, context=context)
-        else:
-            logger.info(f"Connecting to SMTP server {host}:{port} with 10s timeout...")
-            server = smtplib.SMTP(host, port, timeout=10)
-            try:
-                server.starttls(context=context)  # Upgrade connection to secure TLS
-            except Exception as tls_err:
-                logger.warning(f"STARTTLS failed or not supported: {str(tls_err)}")
-        
-        # Login
-        server.login(user, password)
-        
-        # Send
-        server.sendmail(user, recipient_email, msg.as_string())
-        server.quit()
+        with force_ipv4_dns():
+            if port == 465:
+                logger.info(f"Connecting to SMTP SSL server {host}:{port} with 10s timeout...")
+                server = smtplib.SMTP_SSL(host, port, timeout=10, context=context)
+            else:
+                logger.info(f"Connecting to SMTP server {host}:{port} with 10s timeout...")
+                server = smtplib.SMTP(host, port, timeout=10)
+                try:
+                    server.starttls(context=context)  # Upgrade connection to secure TLS
+                except Exception as tls_err:
+                    logger.warning(f"STARTTLS failed or not supported: {str(tls_err)}")
+            
+            # Login
+            server.login(user, password)
+            
+            # Send
+            server.sendmail(user, recipient_email, msg.as_string())
+            server.quit()
         
         logger.info(f"Email successfully sent to {recipient_email}")
         return True, "Sent"
