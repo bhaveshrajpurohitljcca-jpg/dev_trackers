@@ -57,23 +57,25 @@ try:
                 db_mig.close()
 
     # Drop Messages and Achievements tables if they exist
-    db_mig = next(get_db())
-    try:
-        dialect = db_mig.bind.dialect.name
-        tables_to_drop = ["messages", "user_achievements", "achievements"]
-        for table in tables_to_drop:
-            if table in inspector.get_table_names():
-                if dialect == "sqlite":
-                    db_mig.execute(text(f"DROP TABLE IF EXISTS {table}"))
-                else:
-                    db_mig.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
-                db_mig.commit()
-                print(f"Dropped table {table}.")
-    except Exception as e:
-        print(f"Error dropping tables: {e}")
-        db_mig.rollback()
-    finally:
-        db_mig.close()
+    tables_to_drop = ["messages", "user_achievements", "achievements"]
+    existing_tables = inspector.get_table_names()
+    if any(table in existing_tables for table in tables_to_drop):
+        db_mig = next(get_db())
+        try:
+            dialect = db_mig.bind.dialect.name
+            for table in tables_to_drop:
+                if table in existing_tables:
+                    if dialect == "sqlite":
+                        db_mig.execute(text(f"DROP TABLE IF EXISTS {table}"))
+                    else:
+                        db_mig.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+                    db_mig.commit()
+                    print(f"Dropped table {table}.")
+        except Exception as e:
+            print(f"Error dropping tables: {e}")
+            db_mig.rollback()
+        finally:
+            db_mig.close()
 
     # Migrate daily_logs table (Float hours -> Int hours and Int minutes)
     if "daily_logs" in inspector.get_table_names():
@@ -344,28 +346,29 @@ try:
     # Migrate projects table to add github_url and host_url columns if they don't exist
     if "projects" in inspector.get_table_names():
         columns = [col["name"] for col in inspector.get_columns("projects")]
-        db_mig = next(get_db())
-        try:
-            dialect = db_mig.bind.dialect.name
-            if "github_url" not in columns:
-                if dialect == "sqlite":
-                    db_mig.execute(text("ALTER TABLE projects ADD COLUMN github_url VARCHAR"))
-                else:
-                    db_mig.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_url VARCHAR"))
-                db_mig.commit()
-                print("Added column github_url to projects table.")
-            if "host_url" not in columns:
-                if dialect == "sqlite":
-                    db_mig.execute(text("ALTER TABLE projects ADD COLUMN host_url VARCHAR"))
-                else:
-                    db_mig.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS host_url VARCHAR"))
-                db_mig.commit()
-                print("Added column host_url to projects table.")
-        except Exception as e:
-            print(f"Error migrating projects github/host columns: {e}")
-            db_mig.rollback()
-        finally:
-            db_mig.close()
+        if "github_url" not in columns or "host_url" not in columns:
+            db_mig = next(get_db())
+            try:
+                dialect = db_mig.bind.dialect.name
+                if "github_url" not in columns:
+                    if dialect == "sqlite":
+                        db_mig.execute(text("ALTER TABLE projects ADD COLUMN github_url VARCHAR"))
+                    else:
+                        db_mig.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_url VARCHAR"))
+                    db_mig.commit()
+                    print("Added column github_url to projects table.")
+                if "host_url" not in columns:
+                    if dialect == "sqlite":
+                        db_mig.execute(text("ALTER TABLE projects ADD COLUMN host_url VARCHAR"))
+                    else:
+                        db_mig.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS host_url VARCHAR"))
+                    db_mig.commit()
+                    print("Added column host_url to projects table.")
+            except Exception as e:
+                print(f"Error migrating projects github/host columns: {e}")
+                db_mig.rollback()
+            finally:
+                db_mig.close()
 
     # Migrate users table to add weekly_target_hours column if it doesn't exist
     if "users" in inspector.get_table_names():
@@ -401,10 +404,6 @@ try:
         
     # Always seed badges to make sure they exist in the database
     crud.seed_default_badges(db)
-    
-    # Always recalculate badges on startup to ensure badges match existing database logs
-    print("Startup: Recalculating badges for all users based on database state...")
-    crud.recalculate_all_badges(db)
 except Exception as e:
     print(f"Error seeding database on startup: {e}")
 finally:

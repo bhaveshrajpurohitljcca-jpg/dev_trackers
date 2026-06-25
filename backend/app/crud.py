@@ -640,11 +640,14 @@ def seed_default_badges(db: Session):
         ("Competition", "Awarded based on weekly leaderboard rankings."),
         ("Collector", "Awarded based on total badges earned in your path.")
     ]
+    existing_categories = {c.name for c in db.query(models.BadgeCategory.name).all()}
+    categories_added = False
     for cat_name, cat_desc in categories:
-        db_cat = db.query(models.BadgeCategory).filter(models.BadgeCategory.name == cat_name).first()
-        if not db_cat:
+        if cat_name not in existing_categories:
             db.add(models.BadgeCategory(name=cat_name, description=cat_desc))
-    db.commit()
+            categories_added = True
+    if categories_added:
+        db.commit()
 
     # 2. Seed Badges
     badges_to_seed = [
@@ -751,9 +754,10 @@ def seed_default_badges(db: Session):
         # --- Ultimate Collector Badge ---
         {"code": "ultimate_collector", "name": "Ultimate Collector", "description": "Earn every available badge for your assigned department path.", "category": "Collector", "rarity": "Legendary", "icon": "💎", "required_value": 1, "department": None}
     ]
+    existing_badge_codes = {b.code for b in db.query(models.Badge.code).all()}
+    badges_added = False
     for b_data in badges_to_seed:
-        db_badge = db.query(models.Badge).filter(models.Badge.code == b_data["code"]).first()
-        if not db_badge:
+        if b_data["code"] not in existing_badge_codes:
             db.add(models.Badge(
                 code=b_data["code"],
                 name=b_data["name"],
@@ -764,7 +768,9 @@ def seed_default_badges(db: Session):
                 required_value=b_data["required_value"],
                 department=b_data["department"]
             ))
-    db.commit()
+            badges_added = True
+    if badges_added:
+        db.commit()
 
 
 def check_and_update_badges(db: Session, user_id: int):
