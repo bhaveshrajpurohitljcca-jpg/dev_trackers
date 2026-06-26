@@ -36,7 +36,9 @@ def create_user(db: Session, user: schemas.UserCreate):
         role=user.role,
         primary_team=p_team,
         secondary_team=s_team,
-        is_active=user.is_active
+        is_active=user.is_active,
+        weekly_target_hours=user.weekly_target_hours,
+        blocked_features=user.blocked_features
     )
     db.add(db_user)
     db.commit()

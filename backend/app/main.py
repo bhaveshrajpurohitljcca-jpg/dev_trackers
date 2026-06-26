@@ -388,6 +388,22 @@ try:
                 db_mig.rollback()
             finally:
                 db_mig.close()
+
+        if "blocked_features" not in columns:
+            db_mig = next(get_db())
+            try:
+                dialect = db_mig.bind.dialect.name
+                if dialect == "sqlite":
+                    db_mig.execute(text("ALTER TABLE users ADD COLUMN blocked_features VARCHAR DEFAULT ''"))
+                else:
+                    db_mig.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_features VARCHAR DEFAULT ''"))
+                db_mig.commit()
+                print("Added column blocked_features to users table.")
+            except Exception as e:
+                print(f"Error migrating users table (blocked_features): {e}")
+                db_mig.rollback()
+            finally:
+                db_mig.close()
                 
 except Exception as e:
     print(f"Inspector migration error: {e}")

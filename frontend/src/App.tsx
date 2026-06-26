@@ -177,6 +177,23 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
   if (adminOnly && user.role !== 'admin') return <Navigate to="/profile" replace />;
   if (!adminOnly && user.role === 'admin' && location.pathname !== '/profile' && location.pathname !== '/gallery' && location.pathname !== '/badges') return <Navigate to="/profile" replace />;
 
+  const blockedList = user.blocked_features
+    ? user.blocked_features.split(',').map((f: string) => f.trim().toLowerCase())
+    : [];
+
+  const path = location.pathname.toLowerCase();
+  let isBlocked = false;
+  if (path.startsWith('/logs') && blockedList.includes('logs')) isBlocked = true;
+  else if (path.startsWith('/roadmap') && blockedList.includes('roadmap')) isBlocked = true;
+  else if (path.startsWith('/projects') && blockedList.includes('projects')) isBlocked = true;
+  else if (path.startsWith('/leaderboard') && blockedList.includes('leaderboard')) isBlocked = true;
+  else if (path.startsWith('/badges') && blockedList.includes('badges')) isBlocked = true;
+  else if (path.startsWith('/gallery') && blockedList.includes('gallery')) isBlocked = true;
+
+  if (isBlocked) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -230,6 +247,10 @@ function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }
 
   if (!user) return null;
 
+  const blockedList = user.blocked_features
+    ? user.blocked_features.split(',').map((f: string) => f.trim().toLowerCase())
+    : [];
+
   return (
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
@@ -244,71 +265,80 @@ function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }
         )}
       </div>
 
-      <nav className="sidebar-nav" onClick={onClose}>
+      <nav className="sidebar-nav">
         {user.role === 'admin' ? (
           <>
-            <Link to="/admin/dashboard" className={`sidebar-link ${location.pathname === '/admin/dashboard' ? 'active' : ''}`}>
+            <Link to="/admin/dashboard" className={`sidebar-link ${location.pathname === '/admin/dashboard' ? 'active' : ''}`} onClick={onClose}>
               <LayoutDashboard size={18} />
-              <span>Admin Dash</span>
+              <span>Dashboard</span>
             </Link>
-            <div style={{ margin: '1.5rem 0 0.5rem 0.5rem', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
-              Admin Panel
-            </div>
-            <Link to="/admin/users" className={`sidebar-link ${location.pathname === '/admin/users' ? 'active' : ''}`}>
+            <Link to="/admin/users" className={`sidebar-link ${location.pathname === '/admin/users' ? 'active' : ''}`} onClick={onClose}>
               <Users size={18} />
               <span>Users</span>
             </Link>
-            <Link to="/admin/performance" className={`sidebar-link ${location.pathname === '/admin/performance' ? 'active' : ''}`}>
+            <Link to="/admin/performance" className={`sidebar-link ${location.pathname === '/admin/performance' ? 'active' : ''}`} onClick={onClose}>
               <TrendingUp size={18} />
               <span>Performance</span>
             </Link>
-             <Link to="/admin/roadmaps" className={`sidebar-link ${location.pathname === '/admin/roadmaps' ? 'active' : ''}`}>
+             <Link to="/admin/roadmaps" className={`sidebar-link ${location.pathname === '/admin/roadmaps' ? 'active' : ''}`} onClick={onClose}>
               <BookOpen size={18} />
               <span>Roadmaps</span>
             </Link>
-            <Link to="/admin/settings" className={`sidebar-link ${location.pathname === '/admin/settings' ? 'active' : ''}`}>
+            <Link to="/admin/settings" className={`sidebar-link ${location.pathname === '/admin/settings' ? 'active' : ''}`} onClick={onClose}>
               <SettingsIcon size={18} />
               <span>Settings</span>
             </Link>
-            <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`}>
+            <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`} onClick={onClose}>
               <ShieldCheck size={18} />
               <span>Badge Management</span>
             </Link>
-            <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
+            <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`} onClick={onClose}>
               <Award size={18} />
               <span>Spotlight Gallery</span>
             </Link>
           </>
         ) : (
           <>
-            <Link to="/dashboard" className={`sidebar-link ${location.pathname === '/dashboard' ? 'active' : ''}`}>
+            <Link to="/dashboard" className={`sidebar-link ${location.pathname === '/dashboard' ? 'active' : ''}`} onClick={onClose}>
               <LayoutDashboard size={18} />
               <span>Dashboard</span>
             </Link>
-            <Link to="/logs" className={`sidebar-link ${location.pathname === '/logs' ? 'active' : ''}`}>
-              <Calendar size={18} />
-              <span>Work Logs</span>
-            </Link>
-            <Link to="/roadmap" className={`sidebar-link ${location.pathname === '/roadmap' ? 'active' : ''}`}>
-              <CheckCircle2 size={18} />
-              <span>Roadmaps</span>
-            </Link>
-            <Link to="/projects" className={`sidebar-link ${location.pathname.startsWith('/projects') ? 'active' : ''}`}>
-              <FolderGit2 size={18} />
-              <span>Projects</span>
-            </Link>
-            <Link to="/leaderboard" className={`sidebar-link ${location.pathname === '/leaderboard' ? 'active' : ''}`}>
-              <Trophy size={18} />
-              <span>Leaderboard</span>
-            </Link>
-            <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`}>
-              <ShieldCheck size={18} />
-              <span>Badge Collection</span>
-            </Link>
-            <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`}>
-              <Award size={18} />
-              <span>Spotlight Gallery</span>
-            </Link>
+            {!blockedList.includes('logs') && (
+              <Link to="/logs" className={`sidebar-link ${location.pathname === '/logs' ? 'active' : ''}`} onClick={onClose}>
+                <Calendar size={18} />
+                <span>Work Logs</span>
+              </Link>
+            )}
+            {!blockedList.includes('roadmap') && (
+              <Link to="/roadmap" className={`sidebar-link ${location.pathname === '/roadmap' ? 'active' : ''}`} onClick={onClose}>
+                <CheckCircle2 size={18} />
+                <span>Roadmaps</span>
+              </Link>
+            )}
+            {!blockedList.includes('projects') && (
+              <Link to="/projects" className={`sidebar-link ${location.pathname.startsWith('/projects') ? 'active' : ''}`} onClick={onClose}>
+                <FolderGit2 size={18} />
+                <span>Projects</span>
+              </Link>
+            )}
+            {!blockedList.includes('leaderboard') && (
+              <Link to="/leaderboard" className={`sidebar-link ${location.pathname === '/leaderboard' ? 'active' : ''}`} onClick={onClose}>
+                <Trophy size={18} />
+                <span>Leaderboard</span>
+              </Link>
+            )}
+            {!blockedList.includes('badges') && (
+              <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`} onClick={onClose}>
+                <ShieldCheck size={18} />
+                <span>Badge Collection</span>
+              </Link>
+            )}
+            {!blockedList.includes('gallery') && (
+              <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`} onClick={onClose}>
+                <Award size={18} />
+                <span>Spotlight Gallery</span>
+              </Link>
+            )}
           </>
         )}
       </nav>
@@ -985,14 +1015,7 @@ export function UserDashboard() {
           <span className="stat-desc">Roadmap checkpoints</span>
         </div>
 
-        <div className="glass-card stat-card">
-          <div className="stat-header">
-            <span className="stat-title">Current Rank</span>
-            <div className="stat-icon" style={{ color: 'var(--color-warning)' }}><Trophy size={18} /></div>
-          </div>
-          <span className="stat-value">#{data?.rank}</span>
-          <span className="stat-desc">Team leaderboard standing</span>
-        </div>
+
       </div>
 
       <div className="dash-grid-details">
@@ -4681,8 +4704,17 @@ export function AdminUsers() {
   const [secondaryTeam, setSecondaryTeam] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [weeklyTargetHours, setWeeklyTargetHours] = useState<number>(10);
+  const [blockedFeatures, setBlockedFeatures] = useState<string[]>([]);
   const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
+
+  const toggleBlockedFeature = (feature: string) => {
+    setBlockedFeatures(prev => 
+      prev.includes(feature) 
+        ? prev.filter(f => f !== feature) 
+        : [...prev, feature]
+    );
+  };
 
   const fetchUsers = async () => {
     try {
@@ -4709,6 +4741,7 @@ export function AdminUsers() {
     setSecondaryTeam('');
     setIsActive(true);
     setWeeklyTargetHours(10);
+    setBlockedFeatures([]);
     setShowCreatePassword(false);
     setShowModal('create');
   };
@@ -4723,6 +4756,10 @@ export function AdminUsers() {
     setSecondaryTeam(u.secondary_team || '');
     setIsActive(u.is_active);
     setWeeklyTargetHours(u.weekly_target_hours || 10);
+    const blocked = u.blocked_features 
+      ? u.blocked_features.split(',').map(f => f.trim().toLowerCase()) 
+      : [];
+    setBlockedFeatures(blocked);
     setShowModal('edit');
   };
 
@@ -4763,7 +4800,8 @@ export function AdminUsers() {
         primary_team: primaryTeam || null,
         secondary_team: secondaryTeam || null,
         is_active: isActive,
-        weekly_target_hours: weeklyTargetHours
+        weekly_target_hours: weeklyTargetHours,
+        blocked_features: blockedFeatures.join(',')
       });
       showSuccess('User successfully created!');
       setShowModal(null);
@@ -4793,7 +4831,8 @@ export function AdminUsers() {
         primary_team: primaryTeam || null,
         secondary_team: secondaryTeam || null,
         is_active: isActive,
-        weekly_target_hours: weeklyTargetHours
+        weekly_target_hours: weeklyTargetHours,
+        blocked_features: blockedFeatures.join(',')
       });
       showSuccess('User profile successfully updated!');
       setShowModal(null);
@@ -4932,6 +4971,34 @@ export function AdminUsers() {
                   required 
                 />
               </div>
+              {role === 'user' && (
+                <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                  <label className="form-label">Block Access to Tabs</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    {[
+                      { key: 'logs', label: 'Work Logs' },
+                      { key: 'roadmap', label: 'Roadmaps' },
+                      { key: 'projects', label: 'Projects' },
+                      { key: 'leaderboard', label: 'Leaderboard' },
+                      { key: 'badges', label: 'Badge Collection' },
+                      { key: 'gallery', label: 'Spotlight Gallery' }
+                    ].map(item => (
+                      <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input 
+                          id={`new-block-${item.key}`} 
+                          type="checkbox" 
+                          checked={blockedFeatures.includes(item.key)} 
+                          onChange={() => toggleBlockedFeature(item.key)}
+                          disabled={submitting}
+                        />
+                        <label htmlFor={`new-block-${item.key}`} style={{ fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                          {item.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <input id="new-active" type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} disabled={submitting} />
                 <label className="form-label" htmlFor="new-active" style={{ cursor: 'pointer' }}>Is Active Profile</label>
@@ -4997,6 +5064,34 @@ export function AdminUsers() {
                   required 
                 />
               </div>
+              {role === 'user' && (
+                <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                  <label className="form-label">Block Access to Tabs</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    {[
+                      { key: 'logs', label: 'Work Logs' },
+                      { key: 'roadmap', label: 'Roadmaps' },
+                      { key: 'projects', label: 'Projects' },
+                      { key: 'leaderboard', label: 'Leaderboard' },
+                      { key: 'badges', label: 'Badge Collection' },
+                      { key: 'gallery', label: 'Spotlight Gallery' }
+                    ].map(item => (
+                      <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input 
+                          id={`edit-block-${item.key}`} 
+                          type="checkbox" 
+                          checked={blockedFeatures.includes(item.key)} 
+                          onChange={() => toggleBlockedFeature(item.key)}
+                          disabled={submitting}
+                        />
+                        <label htmlFor={`edit-block-${item.key}`} style={{ fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                          {item.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <input id="edit-active" type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} disabled={submitting} />
                 <label className="form-label" htmlFor="edit-active" style={{ cursor: 'pointer' }}>Is Active Profile</label>

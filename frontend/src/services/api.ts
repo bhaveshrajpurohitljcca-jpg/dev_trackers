@@ -14,6 +14,7 @@ export interface User {
   is_active: boolean;
   created_date: string;
   weekly_target_hours?: number;
+  blocked_features?: string | null;
 }
 
 

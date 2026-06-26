@@ -55,6 +55,7 @@ class UserBase(BaseModel):
     primary_team: Optional[str] = None
     secondary_team: Optional[str] = None
     weekly_target_hours: int = 10
+    blocked_features: Optional[str] = ""
 
 class UserCreate(UserBase):
     password: str
@@ -70,6 +71,7 @@ class UserUpdate(BaseModel):
     primary_team: Optional[str] = None
     secondary_team: Optional[str] = None
     weekly_target_hours: Optional[int] = None
+    blocked_features: Optional[str] = ""
 
 class UserResponse(UserBase):
     id: int
