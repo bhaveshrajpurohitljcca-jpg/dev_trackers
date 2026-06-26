@@ -247,9 +247,7 @@ function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }
 
   if (!user) return null;
 
-  const blockedList = user.blocked_features
-    ? user.blocked_features.split(',').map((f: string) => f.trim().toLowerCase())
-    : [];
+
 
   return (
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
@@ -303,42 +301,30 @@ function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }
               <LayoutDashboard size={18} />
               <span>Dashboard</span>
             </Link>
-            {!blockedList.includes('logs') && (
-              <Link to="/logs" className={`sidebar-link ${location.pathname === '/logs' ? 'active' : ''}`} onClick={onClose}>
-                <Calendar size={18} />
-                <span>Work Logs</span>
-              </Link>
-            )}
-            {!blockedList.includes('roadmap') && (
-              <Link to="/roadmap" className={`sidebar-link ${location.pathname === '/roadmap' ? 'active' : ''}`} onClick={onClose}>
-                <CheckCircle2 size={18} />
-                <span>Roadmaps</span>
-              </Link>
-            )}
-            {!blockedList.includes('projects') && (
-              <Link to="/projects" className={`sidebar-link ${location.pathname.startsWith('/projects') ? 'active' : ''}`} onClick={onClose}>
-                <FolderGit2 size={18} />
-                <span>Projects</span>
-              </Link>
-            )}
-            {!blockedList.includes('leaderboard') && (
-              <Link to="/leaderboard" className={`sidebar-link ${location.pathname === '/leaderboard' ? 'active' : ''}`} onClick={onClose}>
-                <Trophy size={18} />
-                <span>Leaderboard</span>
-              </Link>
-            )}
-            {!blockedList.includes('badges') && (
-              <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`} onClick={onClose}>
-                <ShieldCheck size={18} />
-                <span>Badge Collection</span>
-              </Link>
-            )}
-            {!blockedList.includes('gallery') && (
-              <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`} onClick={onClose}>
-                <Award size={18} />
-                <span>Spotlight Gallery</span>
-              </Link>
-            )}
+            <Link to="/logs" className={`sidebar-link ${location.pathname === '/logs' ? 'active' : ''}`} onClick={onClose}>
+              <Calendar size={18} />
+              <span>Work Logs</span>
+            </Link>
+            <Link to="/roadmap" className={`sidebar-link ${location.pathname === '/roadmap' ? 'active' : ''}`} onClick={onClose}>
+              <CheckCircle2 size={18} />
+              <span>Roadmaps</span>
+            </Link>
+            <Link to="/projects" className={`sidebar-link ${location.pathname.startsWith('/projects') ? 'active' : ''}`} onClick={onClose}>
+              <FolderGit2 size={18} />
+              <span>Projects</span>
+            </Link>
+            <Link to="/leaderboard" className={`sidebar-link ${location.pathname === '/leaderboard' ? 'active' : ''}`} onClick={onClose}>
+              <Trophy size={18} />
+              <span>Leaderboard</span>
+            </Link>
+            <Link to="/badges" className={`sidebar-link ${location.pathname === '/badges' ? 'active' : ''}`} onClick={onClose}>
+              <ShieldCheck size={18} />
+              <span>Badge Collection</span>
+            </Link>
+            <Link to="/gallery" className={`sidebar-link ${location.pathname === '/gallery' ? 'active' : ''}`} onClick={onClose}>
+              <Award size={18} />
+              <span>Spotlight Gallery</span>
+            </Link>
           </>
         )}
       </nav>
